@@ -35,6 +35,27 @@ class SpHistory(object):
     return self._input
 
 
+  def getParams(self):
+    sp = self._sp
+    return {
+      "numInputs": sp.getNumInputs(),
+      "numColumns": sp.getNumColumns(),
+      "columnDimensions": sp.getColumnDimensions().tolist(),
+      "numActiveColumnsPerInhArea": sp.getNumActiveColumnsPerInhArea(),
+      "potentialPct": sp.getPotentialPct(),
+      "globalInhibition": sp.getGlobalInhibition(),
+      "localAreaDensity": sp.getLocalAreaDensity(),
+      "stimulusThreshold": sp.getStimulusThreshold(),
+      "synPermActiveInc": sp.getSynPermActiveInc(),
+      "synPermInactiveDec": sp.getSynPermInactiveDec(),
+      "synPermConnected": sp.getSynPermConnected(),
+      "minPctOverlapDutyCycle": sp.getMinPctOverlapDutyCycles(),
+      "minPctActiveDutyCycle": sp.getMinPctActiveDutyCycles(),
+      "dutyCyclePeriod": sp.getDutyCyclePeriod(),
+      "maxBoost": sp.getMaxBoost(),
+    }
+
+
   def compute(self, input, learn=False):
     sp = self._sp
     columns = np.zeros(sp.getNumColumns(), dtype="uint32")

@@ -35,7 +35,7 @@ def runTest():
 
   shim._redisClient.cleanAll()
 
-  for i in range(10):
+  for i in range(1):
     input = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(input):
       if random() < 0.1:

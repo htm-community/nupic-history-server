@@ -25,6 +25,7 @@ class SpRedisClient(object):
 
   # Redis keys.
   SP_LIST = "sp_list"
+  SP_PARAMS = "{}_params" # spid
   GLOBAL_VALS = "{}_{}_{}" # spid, iteration, storage type
   COLUMN_VALS = "{}_{}_col-{}_{}" # spid, iteration, column index, storage type
 
@@ -97,8 +98,9 @@ class SpRedisClient(object):
 
 
   def _updateRegistry(self, spHistory):
-    rds = self._redis
-    spList = rds.get(self.SP_LIST)
+    # All saved Spatial Pooler information is keyed by an index and saved into
+    # a key defined by SP_LIST.
+    spList = self._redis.get(self.SP_LIST)
     spId = spHistory.getId()
     entry = {
       "id": spId,
@@ -110,11 +112,16 @@ class SpRedisClient(object):
       spList = json.loads(spList)
       if spId not in [saved["id"] for saved in spList["sps"]]:
         spList["sps"].append(entry)
-    rds.set(self.SP_LIST, json.dumps(spList))
+    self._saveObject(self.SP_LIST, spList)
+    params = {
+      "params": spHistory.getParams()
+    }
+    self._saveObject(self.SP_PARAMS.format(spId), params)
 
 
 
   def cleanAll(self):
+    # Nukes absolutely all data saved about SP instances.
     rds = self._redis
     spList = rds.get(self.SP_LIST)
     deleted = 0
@@ -131,8 +138,8 @@ class SpRedisClient(object):
 
 
   def _saveObject(self, key, obj):
-    str = json.dumps(obj)
+    # Using explicit separators keeps unnecessary whitespace out of Redis.
+    str = json.dumps(obj, separators=(',',':'))
     size = sys.getsizeof(str)
-    # print "Saving {} ({} bytes)".format(key, size)
     self._redis.set(key, str)
     return size
