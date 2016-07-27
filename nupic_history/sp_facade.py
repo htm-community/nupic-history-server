@@ -68,13 +68,14 @@ class SpFacade(object):
     return params
 
 
-  def compute(self, input, learn=False):
+  def compute(self, input, learn=False, save=False):
     sp = self._sp
     columns = np.zeros(sp.getNumColumns(), dtype="uint32")
     sp.compute(input, learn, columns)
     self._input = input.tolist()
     self._activeColumns = columns.tolist()
     self._advance()
+    if save: self.save()
 
 
   def getState(self, *args, **kwargs):

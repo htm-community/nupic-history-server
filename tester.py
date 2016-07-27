@@ -34,16 +34,15 @@ def runSaveTest():
     wrapAround=True
   )
   spHistory.nuke()
-  shim = spHistory.create(sp)
-  assert shim.isActive()
+  sp = spHistory.create(sp)
+  assert sp.isActive()
   for i in range(20):
     input = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(input):
       if random() < 0.1:
         input[j] = 1
-    shim.compute(input, learn=True)
-    shim.save()
-  return shim.getId()
+    sp.compute(input, learn=True, save=True)
+  return sp.getId()
 
 
 def runFetchTest(spid):
