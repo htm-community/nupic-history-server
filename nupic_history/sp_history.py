@@ -1,11 +1,10 @@
 import time
 import uuid
-import json
-import sys
 
 import numpy as np
 
-from npc_history import SpSnapshots
+from nupic_history import SpSnapshots
+from nupic_history.sp_redis_client import SpRedisClient
 
 
 class SpHistory(object):
@@ -13,15 +12,27 @@ class SpHistory(object):
   _potentialPools = None
 
 
-  def __init__(self, sp, redis=None):
+  def __init__(self, sp):
     self._sp = sp
-    self._redis = redis
+    self._redisClient = SpRedisClient()
     self._iteration = -1
     self._state = None
     self._input = None
     self._activeColumns = None
     self._overlaps = None
     self._id = str(uuid.uuid4()).split('-')[0]
+
+
+  def getId(self):
+    return self._id
+
+
+  def getIteration(self):
+    return self._iteration
+
+
+  def getInput(self):
+    return self._input
 
 
   def compute(self, input, learn=False):
@@ -48,63 +59,7 @@ class SpHistory(object):
 
 
   def save(self):
-    start = time.time() * 1000
-    bytesSaved = 0
-
-    if self._redis is None:
-      print "Skipping snapshot (no redis client)"
-      return
-
-    if self._input is None:
-      raise ValueError("Cannot save SP state because it has never seen input.")
-
-    state = self.getState(
-      SpSnapshots.INPUT,
-      SpSnapshots.POT_POOLS,
-      SpSnapshots.CON_SYN,
-      SpSnapshots.PERMS,
-      SpSnapshots.ACT_COL,
-      SpSnapshots.OVERLAPS,
-      SpSnapshots.ACT_DC,
-      SpSnapshots.OVP_DC
-    )
-
-    # Active columns and overlaps are small, and can be saved in one key for
-    # each time step.
-    for outType in [SpSnapshots.ACT_COL, SpSnapshots.OVERLAPS, SpSnapshots.INPUT]:
-      key = "{}_{}_{}".format(self._id, self._iteration, outType)
-      payload = dict()
-      payload[outType] = state[outType]
-      bytesSaved += self._saveObject(key, payload)
-
-    # Connected synapses are big, and will be broken out and saved in one value
-    # per column, so they can be retrieved more efficiently by column by the
-    # client later.
-    columnSynapses = state[SpSnapshots.CON_SYN]
-    for columnIndex, connections in enumerate(columnSynapses):
-      key = "{}_{}_col-{}_{}".format(self._id, self._iteration,
-                                     columnIndex, SpSnapshots.CON_SYN)
-      bytesSaved += self._saveObject(key, columnSynapses[columnIndex])
-
-    # Permanences are also big, so same thing.
-    perms = state[SpSnapshots.PERMS]
-    for columnIndex, permanences in enumerate(perms):
-      key = "{}_{}_col-{}_{}".format(self._id, self._iteration,
-                                     columnIndex, SpSnapshots.PERMS)
-      bytesSaved += self._saveObject(key, perms[columnIndex])
-
-    print "{} bytes saved".format(bytesSaved)
-    end = time.time() * 1000
-    print("\tSP state serialization took %g ms" % (end - start))
-
-
-  def _saveObject(self, key, obj):
-    str = json.dumps(obj)
-    size = sys.getsizeof(str)
-    # print "Saving {} ({} bytes)".format(key, size)
-    self._redis.set(key, str)
-    return size
-
+    self._redisClient.saveSpState(self)
 
 
   def _getSnapshot(self, name):

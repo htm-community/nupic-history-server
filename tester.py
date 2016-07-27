@@ -1,10 +1,10 @@
-import numpy as np
+from random import random
 
-import redis
+import numpy as np
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from npc_history import SpHistory, SpSnapshots
+from nupic_history import SpHistory
 
 def runTest():
   inputSize = 600
@@ -31,15 +31,17 @@ def runTest():
     wrapAround=True
   )
 
-  shim = SpHistory(sp, redis=redis.Redis("localhost"))
+  shim = SpHistory(sp)
 
-  input = np.random.randint(2, size=inputSize)
+  shim._redisClient.cleanAll()
 
   for i in range(10):
-    shim.compute(input)
+    input = np.zeros(shape=(inputSize,))
+    for j, _ in enumerate(input):
+      if random() < 0.1:
+        input[j] = 1
+    shim.compute(input, learn=True)
     shim.save()
-
-
 
 if __name__ == "__main__":
   runTest()

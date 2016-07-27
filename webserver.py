@@ -7,7 +7,7 @@ import web
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from npc_history.patcher import Patcher
+from nupic_history.patcher import Patcher
 
 global spShims
 spShims = {}
@@ -64,7 +64,7 @@ class SPInterface:
       "id": spId,
     }
 
-    
+
     # spState = getSpDetails(requestInput, sp)
     # for key in spState:
     #   payload[key] = spState[key]
