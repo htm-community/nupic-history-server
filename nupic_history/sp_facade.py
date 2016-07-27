@@ -17,7 +17,6 @@ class SpFacade(object):
     self._state = None
     self._input = None
     self._activeColumns = None
-    self._overlaps = None
     if isinstance(sp, basestring):
       self._sp = None
       self._id = sp
@@ -46,23 +45,27 @@ class SpFacade(object):
 
   def getParams(self):
     sp = self._sp
-    return {
-      "numInputs": sp.getNumInputs(),
-      "numColumns": sp.getNumColumns(),
-      "columnDimensions": sp.getColumnDimensions().tolist(),
-      "numActiveColumnsPerInhArea": sp.getNumActiveColumnsPerInhArea(),
-      "potentialPct": sp.getPotentialPct(),
-      "globalInhibition": sp.getGlobalInhibition(),
-      "localAreaDensity": sp.getLocalAreaDensity(),
-      "stimulusThreshold": sp.getStimulusThreshold(),
-      "synPermActiveInc": sp.getSynPermActiveInc(),
-      "synPermInactiveDec": sp.getSynPermInactiveDec(),
-      "synPermConnected": sp.getSynPermConnected(),
-      "minPctOverlapDutyCycle": sp.getMinPctOverlapDutyCycles(),
-      "minPctActiveDutyCycle": sp.getMinPctActiveDutyCycles(),
-      "dutyCyclePeriod": sp.getDutyCyclePeriod(),
-      "maxBoost": sp.getMaxBoost(),
-    }
+    if sp is None:
+      params =self._redisClient.getSpParams(self.getId())
+    else:
+      params ={
+        "numInputs": sp.getNumInputs(),
+        "numColumns": sp.getNumColumns(),
+        "columnDimensions": sp.getColumnDimensions().tolist(),
+        "numActiveColumnsPerInhArea": sp.getNumActiveColumnsPerInhArea(),
+        "potentialPct": sp.getPotentialPct(),
+        "globalInhibition": sp.getGlobalInhibition(),
+        "localAreaDensity": sp.getLocalAreaDensity(),
+        "stimulusThreshold": sp.getStimulusThreshold(),
+        "synPermActiveInc": sp.getSynPermActiveInc(),
+        "synPermInactiveDec": sp.getSynPermInactiveDec(),
+        "synPermConnected": sp.getSynPermConnected(),
+        "minPctOverlapDutyCycle": sp.getMinPctOverlapDutyCycles(),
+        "minPctActiveDutyCycle": sp.getMinPctActiveDutyCycles(),
+        "dutyCyclePeriod": sp.getDutyCyclePeriod(),
+        "maxBoost": sp.getMaxBoost(),
+      }
+    return params
 
 
   def compute(self, input, learn=False):
@@ -75,10 +78,10 @@ class SpFacade(object):
 
 
   def getState(self, *args, **kwargs):
+    start = time.time() * 1000
     iteration = None
     if "iteration" in kwargs:
       iteration = kwargs["iteration"]
-    start = time.time() * 1000
     if self._state is None:
       self._state = {}
     out = dict()
@@ -90,7 +93,7 @@ class SpFacade(object):
     if stateIter is None:
       stateIter = self.getIteration()
     end = time.time() * 1000
-    print "SP state calculation (iteration {}) took {} ms".format(
+    print "SP state extraction (iteration {}) took {} ms".format(
       stateIter, (end - start)
     )
     return out
@@ -102,6 +105,10 @@ class SpFacade(object):
 
   def delete(self):
     self._redisClient.delete(self.getId())
+
+
+  def getNumColumns(self):
+    return self.getParams()["numColumns"]
 
 
   def _getSnapshot(self, name, iteration=None):
@@ -123,41 +130,47 @@ class SpFacade(object):
 
 
   def _conjureInput(self, iteration=None):
-    if iteration is None or iteration == self._iteration:
+    if iteration is None or iteration == self.getIteration():
       return self._input
     else:
-      return self._redisClient.getGlobalState(
+      return self._redisClient.getLayerState(
         self.getId(), SNAPS.INPUT, iteration
       )
 
 
   def _conjureActiveColumns(self, iteration=None):
-    if iteration is None or iteration == self._iteration:
+    if iteration is None or iteration == self.getIteration():
       return self._activeColumns
     else:
-      return self._redisClient.getGlobalState(
+      return self._redisClient.getLayerState(
         self.getId(), SNAPS.ACT_COL, iteration
       )
 
 
   def _conjureOverlaps(self, iteration=None):
-    if self._overlaps is None:
-      self._overlaps = self._sp.getOverlaps().tolist()
-    return self._overlaps
+    if iteration is None or iteration == self.getIteration():
+      return self._sp.getOverlaps().tolist()
+    else:
+      return self._redisClient.getLayerState(
+        self.getId(), SNAPS.OVERLAPS, iteration
+      )
 
 
   def _conjurePotentialPools(self, iteration=None):
     if self._potentialPools is None:
-      sp = self._sp
-      self._potentialPools = []
-      for colIndex in range(0, sp.getNumColumns()):
-        potentialPools = []
-        potentialPoolsIndices = []
-        sp.getPotential(colIndex, potentialPools)
-        for i, pool in enumerate(potentialPools):
-          if np.asscalar(pool) == 1.0:
-            potentialPoolsIndices.append(i)
-        self._potentialPools.append(potentialPoolsIndices)
+      if iteration is None or iteration == self.getIteration():
+        sp = self._sp
+        self._potentialPools = []
+        for colIndex in range(0, sp.getNumColumns()):
+          potentialPools = []
+          potentialPoolsIndices = []
+          sp.getPotential(colIndex, potentialPools)
+          for i, pool in enumerate(potentialPools):
+            if np.asscalar(pool) == 1.0:
+              potentialPoolsIndices.append(i)
+          self._potentialPools.append(potentialPoolsIndices)
+      else:
+        self._potentialPools = self._redisClient.getPotentialPools(self.getId())
     return self._potentialPools
 
 
@@ -172,24 +185,39 @@ class SpFacade(object):
 
 
   def _conjurePermanences(self, iteration=None):
-    sp = self._sp
     columns = []
-    for colIndex in range(0, sp.getNumColumns()):
-      perms = np.zeros(shape=(sp.getInputDimensions(),))
-      sp.getPermanence(colIndex, perms)
-      columns.append([round(perm, 2) for perm in perms.tolist()])
+    numColumns = self.getNumColumns()
+    inputDims = self.getParams()["numInputs"]
+    sp = self._sp
+    if iteration is None or iteration == self.getIteration():
+      for colIndex in range(0, numColumns):
+        perms = np.zeros(shape=(inputDims,))
+        sp.getPermanence(colIndex, perms)
+        columns.append([round(perm, 2) for perm in perms.tolist()])
+    else:
+        columns = self._redisClient.getPerColumnState(self.getId(), SNAPS.PERMS, iteration, numColumns)
     return columns
 
 
   def _conjureActiveDutyCycles(self, iteration=None):
-    sp = self._sp
-    dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
-    sp.getActiveDutyCycles(dutyCycles)
-    return dutyCycles.tolist()
+    if iteration is None or iteration == self.getIteration():
+      sp = self._sp
+      dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
+      sp.getActiveDutyCycles(dutyCycles)
+      return dutyCycles.tolist()
+    else:
+      return self._redisClient.getLayerState(
+        self.getId(), SNAPS.ACT_DC, iteration
+      )
 
 
   def _conjureOverlapDutyCycles(self, iteration=None):
-    sp = self._sp
-    dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
-    sp.getOverlapDutyCycles(dutyCycles)
-    return dutyCycles.tolist()
+    if iteration is None or iteration == self.getIteration():
+      sp = self._sp
+      dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
+      sp.getOverlapDutyCycles(dutyCycles)
+      return dutyCycles.tolist()
+    else:
+      return self._redisClient.getLayerState(
+        self.getId(), SNAPS.OVP_DC, iteration
+      )

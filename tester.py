@@ -50,10 +50,16 @@ def runFetchTest(spid):
   print "Fetching sp {}".format(spid)
   shim = spHistory.get(spid)
   assert not shim.isActive()
-  for i in range(0, shim.getIteration()):
-    print "iteration {}".format(i)
-    print shim.getState(SpSnapshots.INPUT, iteration=i)
-    print shim.getState(SpSnapshots.ACT_COL, iteration=i)
+  for i in range(0, shim.getIteration()+1):
+    print "\niteration {}".format(i)
+    print shim.getState(SpSnapshots.INPUT, iteration=i).keys()
+    print shim.getState(SpSnapshots.ACT_COL, iteration=i).keys()
+    print shim.getState(SpSnapshots.POT_POOLS, iteration=i).keys()
+    print shim.getState(SpSnapshots.OVERLAPS, iteration=i).keys()
+    print shim.getState(SpSnapshots.PERMS, iteration=i).keys()
+    print shim.getState(SpSnapshots.ACT_DC, iteration=i).keys()
+    print shim.getState(SpSnapshots.OVP_DC, iteration=i).keys()
+    # print shim.getState(SpSnapshots.CON_SYN, iteration=i)
 
 
 if __name__ == "__main__":
