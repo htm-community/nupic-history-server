@@ -59,9 +59,49 @@ class SpRedisClient(object):
     bytesSaved += self._saveSpGlobalValues(state, spid, iteration)
     bytesSaved += self._saveSpColumnPermanences(state, spid, iteration)
 
-    print "{} bytes saved".format(bytesSaved)
     end = time.time() * 1000
-    print("\tSP state serialization took %g ms" % (end - start))
+    print "SP state serialization of {} bytes took {} ms".format(bytesSaved, (end - start))
+
+
+  def nuke(self):
+    # Nukes absolutely all data saved about SP instances.
+    rds = self._redis
+    spList = rds.get(self.SP_LIST)
+    deleted = 0
+    if spList is not None:
+      spList = json.loads(spList)["sps"]
+      for spid in spList:
+        deleted += self.delete(spid)
+      deleted += rds.delete(self.SP_LIST)
+    print "Deleted {} Redis keys.".format(deleted)
+
+
+  def delete(self, spid):
+    rds = self._redis
+    deleted = 0
+    print "deleting sp {}".format(spid)
+    doomed = rds.keys("{}*".format(spid))
+    for key in doomed:
+      deleted += rds.delete(key)
+    # Also remove the registry entry
+    spList = json.loads(rds.get(self.SP_LIST))
+    sps = spList["sps"]
+    doomed = sps.index(spid)
+    del sps[doomed]
+    rds.set(self.SP_LIST, json.dumps(spList))
+    return deleted
+
+
+  def getMaxIteration(self, spid):
+    rds = self._redis
+    # We will use active columns keys to find the max iteration.
+    keys = rds.keys("{}_?_activeColumns".format(spid))
+    return max([int(key.split("_")[1]) for key in keys])
+
+
+  def getGlobalState(self, spid, stateType, iteration):
+    state = self._redis.get(self.GLOBAL_VALS.format(spid, iteration, stateType))
+    return json.loads(state)
 
 
   def _saveSpGlobalValues(self, state, spid, iteration):
@@ -97,44 +137,23 @@ class SpRedisClient(object):
     return bytesSaved
 
 
+
   def _updateRegistry(self, spHistory):
     # All saved Spatial Pooler information is keyed by an index and saved into
     # a key defined by SP_LIST.
     spList = self._redis.get(self.SP_LIST)
-    spId = spHistory.getId()
-    entry = {
-      "id": spId,
-      "created": time.time()
-    }
+    spid = spHistory.getId()
     if spList is None:
-      spList = {"sps": [entry]}
+      spList = {"sps": [spid]}
     else:
       spList = json.loads(spList)
-      if spId not in [saved["id"] for saved in spList["sps"]]:
-        spList["sps"].append(entry)
+      if spid not in spList["sps"]:
+        spList["sps"].append(spid)
     self._saveObject(self.SP_LIST, spList)
     params = {
       "params": spHistory.getParams()
     }
-    self._saveObject(self.SP_PARAMS.format(spId), params)
-
-
-
-  def cleanAll(self):
-    # Nukes absolutely all data saved about SP instances.
-    rds = self._redis
-    spList = rds.get(self.SP_LIST)
-    deleted = 0
-    if spList is not None:
-      spList = json.loads(spList)["sps"]
-      for entry in spList:
-        spId = entry["id"]
-        print "deleting sp {}".format(spId)
-        doomed = rds.keys("{}*".format(spId))
-        for key in doomed:
-          deleted += rds.delete(key)
-      deleted += rds.delete(self.SP_LIST)
-    print "Deleted {} Redis keys.".format(deleted)
+    self._saveObject(self.SP_PARAMS.format(spid), params)
 
 
   def _saveObject(self, key, obj):

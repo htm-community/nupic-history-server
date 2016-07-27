@@ -4,12 +4,15 @@ import numpy as np
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from nupic_history import SpHistory
+from nupic_history import SpHistory, SpSnapshots
 
-def runTest():
+
+spHistory = SpHistory()
+
+
+def runSaveTest():
   inputSize = 600
   outputSize = 2048
-
   sp = SP(
     inputDimensions=(inputSize,),
     columnDimensions=(outputSize,),
@@ -30,18 +33,29 @@ def runTest():
     spVerbosity=0,
     wrapAround=True
   )
-
-  shim = SpHistory(sp)
-
-  shim._redisClient.cleanAll()
-
-  for i in range(1):
+  spHistory.nuke()
+  shim = spHistory.create(sp)
+  assert shim.isActive()
+  for i in range(2):
     input = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(input):
       if random() < 0.1:
         input[j] = 1
     shim.compute(input, learn=True)
     shim.save()
+  return shim.getId()
+
+
+def runFetchTest(spid):
+  print "Fetching sp {}".format(spid)
+  shim = spHistory.get(spid)
+  assert not shim.isActive()
+  for i in range(0, shim.getIteration()):
+    print "iteration {}".format(i)
+    print shim.getState(SpSnapshots.INPUT, iteration=i)
+    print shim.getState(SpSnapshots.ACT_COL, iteration=i)
+
 
 if __name__ == "__main__":
-  runTest()
+  spid = runSaveTest()
+  runFetchTest(spid)
