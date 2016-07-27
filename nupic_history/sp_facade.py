@@ -175,12 +175,24 @@ class SpFacade(object):
 
 
   def _conjureConnectedSynapses(self, iteration=None):
-    sp = self._sp
     columns = []
-    for colIndex in range(0, sp.getNumColumns()):
-      connectedSynapses = np.zeros(shape=(sp.getInputDimensions(),))
-      sp.getConnectedSynapses(colIndex, connectedSynapses)
-      columns.append(np.nonzero(connectedSynapses)[0].tolist())
+    if iteration is None or iteration == self.getIteration():
+      sp = self._sp
+      for colIndex in range(0, sp.getNumColumns()):
+        connectedSynapses = np.zeros(shape=(sp.getInputDimensions(),))
+        sp.getConnectedSynapses(colIndex, connectedSynapses)
+        columns.append(np.nonzero(connectedSynapses)[0].tolist())
+    else:
+      perms = self._conjurePermanences(iteration=iteration)
+      threshold = self.getParams()["synPermConnected"]
+      for columnPerms in perms:
+        colConnections = []
+        for perm in columnPerms:
+          bit = 0
+          if perm > threshold:
+            bit = 1
+          colConnections.append(bit)
+        columns.append(colConnections)
     return columns
 
 

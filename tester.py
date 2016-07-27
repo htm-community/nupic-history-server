@@ -36,7 +36,7 @@ def runSaveTest():
   spHistory.nuke()
   shim = spHistory.create(sp)
   assert shim.isActive()
-  for i in range(2):
+  for i in range(20):
     input = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(input):
       if random() < 0.1:
@@ -59,7 +59,7 @@ def runFetchTest(spid):
     print shim.getState(SpSnapshots.PERMS, iteration=i).keys()
     print shim.getState(SpSnapshots.ACT_DC, iteration=i).keys()
     print shim.getState(SpSnapshots.OVP_DC, iteration=i).keys()
-    # print shim.getState(SpSnapshots.CON_SYN, iteration=i)
+    print shim.getState(SpSnapshots.CON_SYN, iteration=i).keys()
 
 
 if __name__ == "__main__":
