@@ -1,7 +1,12 @@
 import inspect
 
 
-class SpSnapshots:
+class SpSnapshots(object):
+  """
+  This is kindof an Enum. Used to enumerate the different data snapshots the
+  SpFacades make available.
+  """
+
   INPUT = "input"
   POT_POOLS = "potentialPools"
   CON_SYN = "connectedSynapses"
@@ -10,14 +15,6 @@ class SpSnapshots:
   OVERLAPS = "overlaps"
   ACT_DC = "activeDutyCycles"
   OVP_DC = "overlapDutyCycles"
-
-  @classmethod
-  def listKeys(cls):
-    attributes = inspect.getmembers(cls, lambda a: not (inspect.isroutine(a)))
-    return [
-      a[0] for a in attributes
-      if not (a[0].startswith('__') and a[0].endswith('__'))
-    ]
 
 
   @classmethod
@@ -40,7 +37,7 @@ class SpSnapshots:
     index = 1
     if choose == "key":
       index = 0
-    attributes = inspect.getmembers(cls, lambda a: not (inspect.isroutine(a)))
+    attributes = inspect.getmembers(cls, lambda a: not inspect.isroutine(a))
     return [
       a[index] for a in attributes
       if not (a[0].startswith('__') and a[0].endswith('__'))

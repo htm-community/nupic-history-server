@@ -28,7 +28,7 @@ class SpRedisClient(object):
   SP_PARAMS = "{}_params"             # spid
   SP_POT_POOLS = "{}_potentialPools"  # spid
   GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
-  COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index, storage type
+  COLUMN_VALS = "{}_{}_col-{}_{}" # spid, iteration, column index, storage type
 
   def __init__(self, host="localhost", port=6379):
     self._redis = redis.Redis(host=host, port=port)
@@ -64,7 +64,9 @@ class SpRedisClient(object):
     bytesSaved += self._saveSpPotentialPools(state, spid)
 
     end = time.time() * 1000
-    print "SP state serialization of {} bytes took {} ms".format(bytesSaved, (end - start))
+    print "SP state serialization of {} bytes took {} ms".format(
+      bytesSaved, (end - start)
+    )
 
 
   def nuke(self):
@@ -155,7 +157,7 @@ class SpRedisClient(object):
     for columnIndex, permanences in enumerate(perms):
       key = self.COLUMN_VALS.format(spid, iteration, columnIndex, SNAPS.PERMS)
       payload = dict()
-      payload[SNAPS.PERMS] = perms[columnIndex]
+      payload[SNAPS.PERMS] = permanences
       bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
@@ -194,7 +196,7 @@ class SpRedisClient(object):
 
   def _saveObject(self, key, obj):
     # Using explicit separators keeps unnecessary whitespace out of Redis.
-    str = json.dumps(obj, separators=(',',':'))
-    size = sys.getsizeof(str)
-    self._redis.set(key, str)
+    jsonString = json.dumps(obj, separators=(',',':'))
+    size = sys.getsizeof(jsonString)
+    self._redis.set(key, jsonString)
     return size

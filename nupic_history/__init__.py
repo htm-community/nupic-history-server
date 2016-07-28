@@ -1,2 +1,2 @@
-from sp_snapshots import SpSnapshots
-from sp_history import SpHistory
+from nupic_history.sp_snapshots import SpSnapshots
+from nupic_history.sp_history import SpHistory

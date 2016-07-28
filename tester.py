@@ -13,6 +13,7 @@ spHistory = SpHistory()
 def runSaveTest():
   inputSize = 600
   outputSize = 2048
+
   sp = SP(
     inputDimensions=(inputSize,),
     columnDimensions=(outputSize,),
@@ -33,32 +34,47 @@ def runSaveTest():
     spVerbosity=0,
     wrapAround=True
   )
+  # Totally nukes any SP History data that exists in Redis.
   spHistory.nuke()
+  # Create a facade around the SP that saves history as it runs.
   sp = spHistory.create(sp)
+  # If the SP Facade is "active" that means it has a life spatial pooler. If it
+  # is not active, it cannot compute, only playback the history.
   assert sp.isActive()
-  for i in range(20):
-    input = np.zeros(shape=(inputSize,))
-    for j, _ in enumerate(input):
+  for _ in range(0, 1):
+    encoding = np.zeros(shape=(inputSize,))
+    for j, _ in enumerate(encoding):
       if random() < 0.1:
-        input[j] = 1
-    sp.compute(input, learn=True, save=True)
+        encoding[j] = 1
+    # For each compute cycle, save the SP state to Redis for playback later.
+    sp.compute(encoding, learn=True, save=True)
+  # This SP's history can be retrieved with an id.
   return sp.getId()
 
 
 def runFetchTest(spid):
   print "Fetching sp {}".format(spid)
-  shim = spHistory.get(spid)
-  assert not shim.isActive()
-  for i in range(0, shim.getIteration()+1):
+  sp = spHistory.get(spid)
+  # This one is not active, but just an interface for retrieving the state of
+  # the SP when it was active.
+  assert not sp.isActive()
+
+  try:
+    sp.save()
+  except RuntimeError:
+    print "Can't save inactive facade."
+
+  # We can playback the life of the SP.
+  for i in range(0, sp.getIteration() + 1):
     print "\niteration {}".format(i)
-    print shim.getState(SpSnapshots.INPUT, iteration=i).keys()
-    print shim.getState(SpSnapshots.ACT_COL, iteration=i).keys()
-    print shim.getState(SpSnapshots.POT_POOLS, iteration=i).keys()
-    print shim.getState(SpSnapshots.OVERLAPS, iteration=i).keys()
-    print shim.getState(SpSnapshots.PERMS, iteration=i).keys()
-    print shim.getState(SpSnapshots.ACT_DC, iteration=i).keys()
-    print shim.getState(SpSnapshots.OVP_DC, iteration=i).keys()
-    print shim.getState(SpSnapshots.CON_SYN, iteration=i).keys()
+    print sp.getState(SpSnapshots.INPUT, iteration=i).keys()
+    print sp.getState(SpSnapshots.ACT_COL, iteration=i).keys()
+    print sp.getState(SpSnapshots.POT_POOLS, iteration=i).keys()
+    print sp.getState(SpSnapshots.OVERLAPS, iteration=i).keys()
+    print sp.getState(SpSnapshots.PERMS, iteration=i).keys()
+    print sp.getState(SpSnapshots.ACT_DC, iteration=i).keys()
+    print sp.getState(SpSnapshots.OVP_DC, iteration=i).keys()
+    print sp.getState(SpSnapshots.CON_SYN, iteration=i).keys()
 
 
 if __name__ == "__main__":
