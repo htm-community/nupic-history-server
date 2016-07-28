@@ -6,6 +6,18 @@ This is a work in progress. I'm building it to have a consistent HTTP server pro
 
 This relies very heavily on Redis as an in-memory cache (instead of using web sessions). The nice thing is that the history can be maintained in Redis and replayed after the web server has been restarted.
 
+## Installing
+
+Install python requirements.
+
+    pip install -r requirements.txt
+
+Run Redis.
+
+    redis-server
+
+By default, the Redis connection uses `localhost:6379`. I should allow users to override this.
+
 ## Save SP State Over Time
 
 If you have an instance of the NuPIC [`SpatialPooler`](https://github.com/numenta/nupic/blob/master/src/nupic/research/spatial_pooler.py#L97), you can create an `SpFacade` object with it. The `SpFacade` will allow you to save the internal state of the spatial pooler at every compute cycle.

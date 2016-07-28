@@ -1,0 +1,5 @@
+nupic==0.5.4
+nupic.bindings==0.4.4
+redis==2.10.5
+web.py==0.38
+wsgiref==0.1.2
