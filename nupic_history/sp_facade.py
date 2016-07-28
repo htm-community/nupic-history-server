@@ -32,6 +32,12 @@ class SpFacade(object):
       self._iteration = -1
 
 
+  def __str__(self):
+    return "SP {} has seen {} iterations".format(
+      self.getId(), self.getIteration()
+    )
+
+
   def isActive(self):
     """
     Returns True if this facade contains a live spatial pooler. If False, the

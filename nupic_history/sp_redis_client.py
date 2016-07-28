@@ -34,6 +34,10 @@ class SpRedisClient(object):
     self._redis = redis.Redis(host=host, port=port)
 
 
+  def listSpIds(self):
+    return json.loads(self._redis.get(self.SP_LIST))["sps"]
+
+
   def saveSpState(self, spHistory):
     start = time.time() * 1000
 

@@ -13,6 +13,13 @@ class SpHistory(object):
     self._redisClient = SpRedisClient()
 
 
+  def list(self):
+    return [
+      SpFacade(spid, self._redisClient)
+      for spid in self._redisClient.listSpIds()
+    ]
+
+
   def create(self, sp):
     """
     Creates a new active SP Facade for the given SP. Does not actually save
