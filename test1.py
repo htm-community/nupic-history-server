@@ -41,7 +41,7 @@ def runSaveTest():
   # If the SP Facade is "active" that means it has a life spatial pooler. If it
   # is not active, it cannot compute, only playback the history.
   assert sp.isActive()
-  for _ in range(0, 1):
+  for _ in range(0, 10):
     encoding = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(encoding):
       if random() < 0.1:
