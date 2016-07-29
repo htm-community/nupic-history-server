@@ -213,7 +213,7 @@ class SpFacade(object):
     self._iteration += 1
 
 
-  # None of the "_conjureXXX" functions below are direction called. They are all
+  # None of the "_conjureXXX" functions below are directly called. They are all
   # called via string name by the _getSnapshot function, depending on what type
   # of snapshot data is being requested. They are called "conjureXXX" because
   # we won't really be sure where the information is coming from until the

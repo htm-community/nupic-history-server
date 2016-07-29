@@ -23,7 +23,8 @@ class SpRedisClient(object):
   SP_PARAMS = "{}_params"             # spid
   SP_POT_POOLS = "{}_potentialPools"  # spid
   GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
-  COLUMN_VALS = "{}_{}_col-{}_{}" # spid, iteration, column index, storage type
+  COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index,
+                                      #   storage type
 
   def __init__(self, host="localhost", port=6379):
     self._redis = redis.Redis(host=host, port=port)
@@ -46,16 +47,16 @@ class SpRedisClient(object):
       raise ValueError("Cannot save SP state because it has never seen input.")
 
     state = spHistory.getState(
-      SNAPS.INPUT,    #
-      SNAPS.POT_POOLS,#
+      SNAPS.INPUT,
+      SNAPS.POT_POOLS,
       # We are not going to save connections because they can be calculated from
-      # permanence values and the synConnectedThreshold.
+      # permanence values and the synPermConnected param.
       # SNAPS.CON_SYN,
-      SNAPS.PERMS,    #
-      SNAPS.ACT_COL,  #
-      SNAPS.OVERLAPS, #
-      SNAPS.ACT_DC,   #
-      SNAPS.OVP_DC,   #
+      SNAPS.PERMS,
+      SNAPS.ACT_COL,
+      SNAPS.OVERLAPS,
+      SNAPS.ACT_DC,
+      SNAPS.OVP_DC,
     )
 
     bytesSaved += self._saveSpLayerValues(state, spid, iteration)
@@ -174,7 +175,6 @@ class SpRedisClient(object):
 
 
 
-
   def _updateRegistry(self, spHistory):
     # All saved Spatial Pooler information is keyed by an index and saved into
     # a key defined by SP_LIST.
@@ -191,6 +191,7 @@ class SpRedisClient(object):
       "params": spHistory.getParams()
     }
     self._saveObject(self.SP_PARAMS.format(spid), params)
+
 
 
   def _saveObject(self, key, obj):
