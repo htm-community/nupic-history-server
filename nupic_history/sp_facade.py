@@ -4,6 +4,7 @@ import uuid
 import numpy as np
 
 from nupic_history import SpSnapshots as SNAPS
+from nupic_history.utils import compressSdr
 
 
 class SpFacade(object):
@@ -17,11 +18,6 @@ class SpFacade(object):
     :param redisClient: Instantiated Redis client
     """
     self._redisClient = redisClient
-    self._state = None
-    self._input = None
-    self._activeColumns = None
-    self._potentialPools = None
-
     if isinstance(sp, basestring):
       self._sp = None
       self._id = sp
@@ -30,7 +26,10 @@ class SpFacade(object):
       self._sp = sp
       self._id = str(uuid.uuid4()).split('-')[0]
       self._iteration = -1
-
+    self._state = None
+    self._input = None
+    self._activeColumns = self._getZeroedColumns().tolist()
+    self._potentialPools = None
 
   def __str__(self):
     return "SP {} has seen {} iterations".format(
@@ -151,16 +150,23 @@ class SpFacade(object):
     :return:
     """
     start = time.time() * 1000
+
     iteration = None
     if "iteration" in kwargs:
       iteration = kwargs["iteration"]
+    columnIndex = None
+    if "columnIndex" in kwargs:
+      columnIndex = kwargs["columnIndex"]
+
     if self._state is None:
       self._state = {}
     out = dict()
     for snap in args:
       if not SNAPS.contains(snap):
         raise ValueError("{} is not available in SP History.".format(snap))
-      out[snap] = self._getSnapshot(snap, iteration=iteration)
+      out[snap] = self._getSnapshot(
+        snap, iteration=iteration, columnIndex=columnIndex
+      )
     stateIter = iteration
     if stateIter is None:
       stateIter = self.getIteration()
@@ -195,19 +201,6 @@ class SpFacade(object):
     return self.getParams()["numColumns"]
 
 
-  def _getSnapshot(self, name, iteration=None):
-    if name in self._state and iteration == self._iteration:
-      # print "returning cached {}".format(name)
-      return self._state[name]
-    else:
-      # print "conjuring {}".format(name)
-      funcName = "_conjure{}".format(name[:1].upper() + name[1:])
-      func = getattr(self, funcName)
-      result = func(iteration=iteration)
-      self._state[name] = result
-      return result
-
-
   def _advance(self):
     self._state = None
     self._iteration += 1
@@ -215,6 +208,29 @@ class SpFacade(object):
 
   def _usePresentState(self, iteration):
     return iteration is None or iteration == self.getIteration()
+
+
+  def _getSnapshot(self, name, iteration=None, columnIndex=None):
+    if name in self._state and iteration == self._iteration:
+      # print "returning cached {}".format(name)
+      return self._state[name]
+    else:
+      # print "conjuring {}".format(name)
+      funcName = "_conjure{}".format(name[:1].upper() + name[1:])
+      func = getattr(self, funcName)
+      result = func(iteration=iteration, columnIndex=columnIndex)
+      self._state[name] = result
+      return result
+
+
+  def _getZeroedColumns(self):
+    numCols = self.getParams()["numColumns"]
+    return np.zeros(shape=(numCols,))
+
+
+  def _getZeroedInput(self):
+    numInputs = self.getParams()["numInputs"]
+    return np.zeros(shape=(numInputs,))
 
 
   # None of the "_conjureXXX" functions below are directly called. They are all
@@ -227,25 +243,25 @@ class SpFacade(object):
   # iteration in the past is specified, Redis will be the data source.
 
 
-  def _conjureInput(self, iteration=None):
+  def _conjureInput(self, iteration=None, **kwargs):
     if self._usePresentState(iteration):
-      return self._input
+      return compressSdr(self._input)
     else:
       return self._redisClient.getLayerState(
         self.getId(), SNAPS.INPUT, iteration
       )
 
 
-  def _conjureActiveColumns(self, iteration=None):
+  def _conjureActiveColumns(self, iteration=None, **kwargs):
     if self._usePresentState(iteration):
-      return self._activeColumns
+      return compressSdr(self._activeColumns)
     else:
       return self._redisClient.getLayerState(
         self.getId(), SNAPS.ACT_COL, iteration
       )
 
 
-  def _conjureOverlaps(self, iteration=None):
+  def _conjureOverlaps(self, iteration=None, **kwargs):
     if self.isActive() and self._usePresentState(iteration):
       return self._sp.getOverlaps().tolist()
     else:
@@ -255,7 +271,6 @@ class SpFacade(object):
 
 
   def _conjurePotentialPools(self, **kwargs):
-    # The **kwargs is here because this function might be passed iteration=X.
     if self._potentialPools is None:
       if self.isActive():
         sp = self._sp
@@ -273,16 +288,16 @@ class SpFacade(object):
     return self._potentialPools
 
 
-  def _conjureConnectedSynapses(self, iteration=None):
+  def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
     columns = []
     if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
       for colIndex in range(0, sp.getNumColumns()):
-        connectedSynapses = np.zeros(shape=(sp.getInputDimensions(),))
+        connectedSynapses = self._getZeroedInput()
         sp.getConnectedSynapses(colIndex, connectedSynapses)
         columns.append(np.nonzero(connectedSynapses)[0].tolist())
     else:
-      perms = self._conjurePermanences(iteration=iteration)
+      perms = self._conjurePermanences(iteration=iteration, columnIndex=columnIndex)
       threshold = self.getParams()["synPermConnected"]
       for columnPerms in perms:
         colConnections = []
@@ -295,27 +310,32 @@ class SpFacade(object):
     return columns
 
 
-  def _conjurePermanences(self, iteration=None):
-    columns = []
+  def _conjurePermanences(self, iteration=None, columnIndex=None):
+    out = []
     numColumns = self.getNumColumns()
-    inputDims = self.getParams()["numInputs"]
     sp = self._sp
     if self.isActive() and self._usePresentState(iteration):
       for colIndex in range(0, numColumns):
-        perms = np.zeros(shape=(inputDims,))
+        perms = self._getZeroedInput()
         sp.getPermanence(colIndex, perms)
-        columns.append([round(perm, 2) for perm in perms.tolist()])
+        out.append([round(perm, 2) for perm in perms.tolist()])
     else:
-      columns = self._redisClient.getPerColumnState(
-        self.getId(), SNAPS.PERMS, iteration, numColumns
-      )
-    return columns
+      if columnIndex is None:
+        out = self._redisClient.getPerColumnState(
+          self.getId(), SNAPS.PERMS, iteration, numColumns
+        )
+      else:
+        out = self._redisClient.getPerIterationState(
+          self.getId(), SNAPS.PERMS, columnIndex
+        )
+
+    return out
 
 
-  def _conjureActiveDutyCycles(self, iteration=None):
+  def _conjureActiveDutyCycles(self, iteration=None, **kwargs):
     if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
-      dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
+      dutyCycles = self._getZeroedColumns()
       sp.getActiveDutyCycles(dutyCycles)
       return dutyCycles.tolist()
     else:
@@ -324,10 +344,10 @@ class SpFacade(object):
       )
 
 
-  def _conjureOverlapDutyCycles(self, iteration=None):
+  def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
     if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
-      dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
+      dutyCycles = self._getZeroedColumns()
       sp.getOverlapDutyCycles(dutyCycles)
       return dutyCycles.tolist()
     else:

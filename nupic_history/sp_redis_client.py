@@ -5,14 +5,7 @@ import msgpack
 import redis
 
 from nupic_history import SpSnapshots as SNAPS
-
-
-
-def compressSdr(sdr):
-  return {
-    "length": len(sdr),
-    "indices": [i for i, bit in enumerate(sdr) if bit]
-  }
+from nupic_history.utils import compressSdr
 
 
 
@@ -124,6 +117,12 @@ class SpRedisClient(object):
     return out
 
 
+  def getPerIterationState(self, spid, stateType, columnIndex):
+    out = []
+
+    return out
+
+
   def getPotentialPools(self, spid):
     pools = self._redis.get(self.SP_POT_POOLS.format(spid))
     return msgpack.loads(pools)
@@ -138,7 +137,7 @@ class SpRedisClient(object):
     for outType in [SNAPS.ACT_COL, SNAPS.INPUT]:
       key = self.GLOBAL_VALS.format(spid, iteration, outType)
       payload = dict()
-      payload[outType] = compressSdr(state[outType])
+      payload[outType] = state[outType]
       bytesSaved += self._saveObject(key, payload)
     # Overlaps and duty cycles cannot be compressed.
     for outType in [SNAPS.ACT_DC, SNAPS.OVP_DC, SNAPS.OVERLAPS]:
