@@ -9,15 +9,10 @@ from nupic_history import SpSnapshots as SNAPS
 
 
 def compressSdr(sdr):
-  out = {
+  return {
     "length": len(sdr),
-    "indices": []
+    "indices": [i for i, bit in enumerate(sdr) if bit]
   }
-  indices = out["indices"]
-  for i, bit in enumerate(sdr):
-    if bit == 1:
-      indices.append(i)
-  return out
 
 
 
