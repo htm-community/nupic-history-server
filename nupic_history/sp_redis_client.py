@@ -1,6 +1,6 @@
 import sys
 import time
-import json
+import msgpack as json
 
 import redis
 
@@ -196,7 +196,7 @@ class SpRedisClient(object):
 
   def _saveObject(self, key, obj):
     # Using explicit separators keeps unnecessary whitespace out of Redis.
-    jsonString = json.dumps(obj, separators=(',',':'))
+    jsonString = json.dumps(obj)
     size = sys.getsizeof(jsonString)
     self._redis.set(key, jsonString)
     return size
