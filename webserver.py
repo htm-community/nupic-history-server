@@ -6,7 +6,7 @@ import web
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from nupic_history import SpHistory, SpSnapshots
+from nupic_history import SpHistory, SpSnapshots as SNAPS
 
 
 global spFacades
@@ -54,7 +54,7 @@ class Client:
 
 def getSpDetails(requestInput, sp):
   kwargs = {}
-  for param in SpSnapshots.listValues():
+  for param in SNAPS.listValues():
     key = "get{}{}".format(param[:1].upper(), param[1:])
     kwargs[key] = param in requestInput and requestInput[param] == "true"
   print kwargs
@@ -72,6 +72,8 @@ class SPInterface:
     requestInput = web.input()
     shouldSave = "save" in requestInput \
                   and requestInput["save"] == "true"
+    detailedResponse = "detailed" in requestInput \
+                  and requestInput["detailed"] == "true"
     sp = SP(**params)
     spFacade = spHistory.create(sp)
     spId = spFacade.getId()
@@ -80,12 +82,17 @@ class SPInterface:
       "facade": spFacade
     }
     web.header("Content-Type", "application/json")
-    # Send back the SP id and any details about the initial state that the client
-    # specified in the request's URL params.
     payload = {
       "id": spId,
     }
-    spState = getSpDetails(requestInput, spFacade)
+    # We will always return the initial state of columns and overlaps becasue
+    # they are cheap. We'll only get the extra internals if
+    snapshots = [SNAPS.ACT_COL, SNAPS.OVERLAPS]
+    if detailedResponse:
+      snapshots += [
+        SNAPS.POT_POOLS, SNAPS.CON_SYN, SNAPS.PERMS
+      ]
+    spState = spFacade.getState(*snapshots)
     for key in spState:
       payload[key] = spState[key]
     return json.dumps(payload)
@@ -100,17 +107,17 @@ class SPInterface:
     requestInput = web.input()
     encoding = web.data()
     stateSnapshots = [
-      SpSnapshots.INPUT,
-      SpSnapshots.ACT_COL,
-      SpSnapshots.OVERLAPS
+      SNAPS.INPUT,
+      SNAPS.ACT_COL,
+      SNAPS.OVERLAPS
     ]
 
     if "getConnectedSynapses" in requestInput \
                   and requestInput["getConnectedSynapses"] == "true":
-      stateSnapshots.append(SpSnapshots.CON_SYN)
+      stateSnapshots.append(SNAPS.CON_SYN)
     if "potentialPools" in requestInput \
                and requestInput["potentialPools"] == "true":
-      stateSnapshots.append(SpSnapshots.POT_POOLS)
+      stateSnapshots.append(SNAPS.POT_POOLS)
 
     if "id" not in requestInput:
       print "Request must include a spatial pooler id."
@@ -118,7 +125,7 @@ class SPInterface:
 
     spId = requestInput["id"]
 
-    if spId not in spFacades:
+    if spId not in spFacades.keys():
       print "Unknown SP id {}!".format(spId)
       return web.badrequest()
 
@@ -149,9 +156,15 @@ class SPInterface:
 class History:
 
   def GET(self, spId, columnIndex):
-    sp = spFacades[spId]
-    connections = sp.getConnectionHistoryForColumn(columnIndex)
-    permanences = sp.getPermanenceHistoryForColumn(columnIndex)
+    sp = spFacades[spId]["facade"]
+    permanences = sp.getState(
+      SNAPS.PERMS, columnIndex=columnIndex
+    )[SNAPS.PERMS]
+    connections = sp.getState(
+      SNAPS.CON_SYN, columnIndex=columnIndex
+    )[SNAPS.CON_SYN]
+    # connections = sp.getConnectionHistoryForColumn(columnIndex)
+    # permanences = sp.getPermanenceHistoryForColumn(columnIndex)
     return json.dumps({
       "connections": connections,
       "permanences": permanences

@@ -119,7 +119,9 @@ class SpRedisClient(object):
 
   def getPerIterationState(self, spid, stateType, columnIndex):
     out = []
-
+    searchString = self.COLUMN_VALS.format(spid, "*", columnIndex, stateType)
+    for column in msgpack.loads(self.redis.get(searchString)):
+      out.append(column[stateType])
     return out
 
 
