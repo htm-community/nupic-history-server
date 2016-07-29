@@ -1,6 +1,6 @@
 import sys
 import time
-import json
+import msgpack
 
 import redis
 
@@ -31,7 +31,7 @@ class SpRedisClient(object):
 
 
   def listSpIds(self):
-    return json.loads(self._redis.get(self.SP_LIST))["sps"]
+    return msgpack.loads(self._redis.get(self.SP_LIST))["sps"]
 
 
   def saveSpState(self, spHistory):
@@ -75,7 +75,7 @@ class SpRedisClient(object):
     spList = rds.get(self.SP_LIST)
     deleted = 0
     if spList is not None:
-      spList = json.loads(spList)["sps"]
+      spList = msgpack.loads(spList)["sps"]
       for spid in spList:
         deleted += self.delete(spid)
       deleted += rds.delete(self.SP_LIST)
@@ -90,16 +90,16 @@ class SpRedisClient(object):
     for key in doomed:
       deleted += rds.delete(key)
     # Also remove the registry entry
-    spList = json.loads(rds.get(self.SP_LIST))
+    spList = msgpack.loads(rds.get(self.SP_LIST))
     sps = spList["sps"]
     doomed = sps.index(spid)
     del sps[doomed]
-    rds.set(self.SP_LIST, json.dumps(spList))
+    rds.set(self.SP_LIST, msgpack.dumps(spList))
     return deleted
 
 
   def getSpParams(self, spid):
-    params = json.loads(self._redis.get(self.SP_PARAMS.format(spid)))
+    params = msgpack.loads(self._redis.get(self.SP_PARAMS.format(spid)))
     return params["params"]
 
 
@@ -112,21 +112,21 @@ class SpRedisClient(object):
 
   def getLayerState(self, spid, stateType, iteration):
     state = self._redis.get(self.GLOBAL_VALS.format(spid, iteration, stateType))
-    return json.loads(state)[stateType]
+    return msgpack.loads(state)[stateType]
 
 
   def getPerColumnState(self, spid, stateType, iteration, numColumns):
     out = []
     for columnIndex in xrange(0, numColumns):
       key = self.COLUMN_VALS.format(spid, iteration, columnIndex, stateType)
-      column = json.loads(self._redis.get(key))
+      column = msgpack.loads(self._redis.get(key))
       out.append(column[stateType])
     return out
 
 
   def getPotentialPools(self, spid):
     pools = self._redis.get(self.SP_POT_POOLS.format(spid))
-    return json.loads(pools)
+    return msgpack.loads(pools)
 
 
   def _saveSpLayerValues(self, state, spid, iteration):
@@ -183,7 +183,7 @@ class SpRedisClient(object):
     if spList is None:
       spList = {"sps": [spid]}
     else:
-      spList = json.loads(spList)
+      spList = msgpack.loads(spList)
       if spid not in spList["sps"]:
         spList["sps"].append(spid)
     self._saveObject(self.SP_LIST, spList)
@@ -196,7 +196,7 @@ class SpRedisClient(object):
 
   def _saveObject(self, key, obj):
     # Using explicit separators keeps unnecessary whitespace out of Redis.
-    jsonString = json.dumps(obj, separators=(',',':'))
-    size = sys.getsizeof(jsonString)
-    self._redis.set(key, jsonString)
+    msgpackString = msgpack.dumps(obj)
+    size = sys.getsizeof(msgpackString)
+    self._redis.set(key, msgpackString)
     return size

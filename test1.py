@@ -75,21 +75,21 @@ def runFetchTest(spid):
     print "Can't save inactive facade."
 
   start = time.time()
-
+  iterations = sp.getIteration() + 1
   # We can playback the life of the SP.
-  for i in range(0, sp.getIteration() + 1):
-    print "\niteration {}".format(i)
-    print sp.getState(SpSnapshots.INPUT, iteration=i).keys()
-    print sp.getState(SpSnapshots.ACT_COL, iteration=i).keys()
-    print sp.getState(SpSnapshots.POT_POOLS, iteration=i).keys()
-    print sp.getState(SpSnapshots.OVERLAPS, iteration=i).keys()
-    print sp.getState(SpSnapshots.PERMS, iteration=i).keys()
-    print sp.getState(SpSnapshots.ACT_DC, iteration=i).keys()
-    print sp.getState(SpSnapshots.OVP_DC, iteration=i).keys()
-    print sp.getState(SpSnapshots.CON_SYN, iteration=i).keys()
+  for i in range(0, iterations):
+    # print "\niteration {}".format(i)
+    sp.getState(SpSnapshots.INPUT, iteration=i)
+    sp.getState(SpSnapshots.ACT_COL, iteration=i)
+    sp.getState(SpSnapshots.POT_POOLS, iteration=i)
+    sp.getState(SpSnapshots.OVERLAPS, iteration=i)
+    sp.getState(SpSnapshots.PERMS, iteration=i)
+    sp.getState(SpSnapshots.ACT_DC, iteration=i)
+    sp.getState(SpSnapshots.OVP_DC, iteration=i)
+    sp.getState(SpSnapshots.CON_SYN, iteration=i)
 
   end = time.time()
-  print "\nRETRIEVAL: {} iterations took {} seconds.".format(sp.getIteration(), (end - start))
+  print "\nRETRIEVAL: {} iterations took {} seconds.".format(iterations, (end - start))
 
 if __name__ == "__main__":
   spid = runSaveTest()
