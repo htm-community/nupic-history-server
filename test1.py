@@ -1,4 +1,5 @@
 from random import random
+import time
 
 import numpy as np
 
@@ -41,13 +42,22 @@ def runSaveTest():
   # If the SP Facade is "active" that means it has a life spatial pooler. If it
   # is not active, it cannot compute, only playback the history.
   assert sp.isActive()
-  for _ in range(0, 10):
+
+  start = time.time()
+
+  iterations = 10
+  for _ in range(0, iterations):
     encoding = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(encoding):
       if random() < 0.1:
         encoding[j] = 1
     # For each compute cycle, save the SP state to Redis for playback later.
     sp.compute(encoding, learn=True, save=True)
+
+  end = time.time()
+
+  print "\nSTORAGE: {} iterations took {} seconds.\n\n".format(iterations, (end - start))
+
   # This SP's history can be retrieved with an id.
   return sp.getId()
 
@@ -64,6 +74,8 @@ def runFetchTest(spid):
   except RuntimeError:
     print "Can't save inactive facade."
 
+  start = time.time()
+
   # We can playback the life of the SP.
   for i in range(0, sp.getIteration() + 1):
     print "\niteration {}".format(i)
@@ -76,6 +88,8 @@ def runFetchTest(spid):
     print sp.getState(SpSnapshots.OVP_DC, iteration=i).keys()
     print sp.getState(SpSnapshots.CON_SYN, iteration=i).keys()
 
+  end = time.time()
+  print "\nRETRIEVAL: {} iterations took {} seconds.".format(sp.getIteration(), (end - start))
 
 if __name__ == "__main__":
   spid = runSaveTest()
