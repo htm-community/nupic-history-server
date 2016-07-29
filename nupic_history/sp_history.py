@@ -14,6 +14,10 @@ class SpHistory(object):
 
 
   def list(self):
+    """
+    Gets all the SpFacades that have history in Redis.
+    :return: [SpFacade[]]
+    """
     return [
       SpFacade(spid, self._redisClient)
       for spid in self._redisClient.listSpIds()

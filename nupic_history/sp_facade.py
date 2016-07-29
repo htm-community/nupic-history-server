@@ -213,6 +213,10 @@ class SpFacade(object):
     self._iteration += 1
 
 
+  def _usePresentState(self, iteration):
+    return iteration is None or iteration == self.getIteration()
+
+
   # None of the "_conjureXXX" functions below are directly called. They are all
   # called via string name by the _getSnapshot function, depending on what type
   # of snapshot data is being requested. They are called "conjureXXX" because
@@ -224,7 +228,7 @@ class SpFacade(object):
 
 
   def _conjureInput(self, iteration=None):
-    if iteration is None or iteration == self.getIteration():
+    if self._usePresentState(iteration):
       return self._input
     else:
       return self._redisClient.getLayerState(
@@ -233,7 +237,7 @@ class SpFacade(object):
 
 
   def _conjureActiveColumns(self, iteration=None):
-    if iteration is None or iteration == self.getIteration():
+    if self._usePresentState(iteration):
       return self._activeColumns
     else:
       return self._redisClient.getLayerState(
@@ -242,7 +246,7 @@ class SpFacade(object):
 
 
   def _conjureOverlaps(self, iteration=None):
-    if self.isActive() and iteration is None:
+    if self.isActive() and self._usePresentState(iteration):
       return self._sp.getOverlaps().tolist()
     else:
       return self._redisClient.getLayerState(
@@ -251,6 +255,7 @@ class SpFacade(object):
 
 
   def _conjurePotentialPools(self, **kwargs):
+    # The **kwargs is here because this function might be passed iteration=X.
     if self._potentialPools is None:
       if self.isActive():
         sp = self._sp
@@ -270,7 +275,7 @@ class SpFacade(object):
 
   def _conjureConnectedSynapses(self, iteration=None):
     columns = []
-    if self.isActive() and iteration is None:
+    if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
       for colIndex in range(0, sp.getNumColumns()):
         connectedSynapses = np.zeros(shape=(sp.getInputDimensions(),))
@@ -295,7 +300,7 @@ class SpFacade(object):
     numColumns = self.getNumColumns()
     inputDims = self.getParams()["numInputs"]
     sp = self._sp
-    if self.isActive() and iteration is None:
+    if self.isActive() and self._usePresentState(iteration):
       for colIndex in range(0, numColumns):
         perms = np.zeros(shape=(inputDims,))
         sp.getPermanence(colIndex, perms)
@@ -308,7 +313,7 @@ class SpFacade(object):
 
 
   def _conjureActiveDutyCycles(self, iteration=None):
-    if self.isActive() and iteration is None:
+    if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
       dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
       sp.getActiveDutyCycles(dutyCycles)
@@ -320,7 +325,7 @@ class SpFacade(object):
 
 
   def _conjureOverlapDutyCycles(self, iteration=None):
-    if self.isActive() and iteration is None:
+    if self.isActive() and self._usePresentState(iteration):
       sp = self._sp
       dutyCycles = np.zeros(shape=(sp.getNumColumns(),))
       sp.getOverlapDutyCycles(dutyCycles)
