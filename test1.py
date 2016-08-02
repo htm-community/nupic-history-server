@@ -5,7 +5,7 @@ import numpy as np
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from nupic_history import SpHistory, SpSnapshots
+from nupic_history import SpHistory, SpSnapshots as SNAPS
 
 
 spHistory = SpHistory()
@@ -37,8 +37,10 @@ def runSaveTest():
   )
   # Totally nukes any SP History data that exists in Redis.
   spHistory.nuke()
+
   # Create a facade around the SP that saves history as it runs.
   sp = spHistory.create(sp)
+
   # If the SP Facade is "active" that means it has a life spatial pooler. If it
   # is not active, it cannot compute, only playback the history.
   assert sp.isActive()
@@ -78,15 +80,12 @@ def runFetchTest(spid):
   iterations = sp.getIteration() + 1
   # We can playback the life of the SP.
   for i in range(0, iterations):
-    # print "\niteration {}".format(i)
-    sp.getState(SpSnapshots.INPUT, iteration=i)
-    sp.getState(SpSnapshots.ACT_COL, iteration=i)
-    sp.getState(SpSnapshots.POT_POOLS, iteration=i)
-    sp.getState(SpSnapshots.OVERLAPS, iteration=i)
-    sp.getState(SpSnapshots.PERMS, iteration=i)
-    sp.getState(SpSnapshots.ACT_DC, iteration=i)
-    sp.getState(SpSnapshots.OVP_DC, iteration=i)
-    sp.getState(SpSnapshots.CON_SYN, iteration=i)
+    print "\niteration {}".format(i)
+    for snap in [SNAPS.INPUT, SNAPS.ACT_COL]:
+      state = sp.getState(snap, iteration=i)[snap]
+      print "\t{} has {} active bits out of {}".format(snap, len(state["indices"]), state["length"])
+    for snap in [SNAPS.POT_POOLS, SNAPS.OVERLAPS, SNAPS.PERMS, SNAPS.CON_SYN, SNAPS.ACT_DC, SNAPS.OVP_DC]:
+      print "\t{} for {} columns".format(snap, len(sp.getState(snap, iteration=i)[snap]))
 
   end = time.time()
   print "\nRETRIEVAL: {} iterations took {} seconds.".format(iterations, (end - start))
