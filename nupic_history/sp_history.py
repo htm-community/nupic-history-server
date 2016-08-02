@@ -24,7 +24,7 @@ class SpHistory(object):
     ]
 
 
-  def create(self, sp):
+  def create(self, sp, save=False):
     """
     Creates a new active SP Facade for the given SP. Does not actually save
     anything yet.

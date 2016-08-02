@@ -1,5 +1,6 @@
 import time
 import uuid
+from multiprocessing import Pool
 
 import numpy as np
 
@@ -30,6 +31,8 @@ class SpFacade(object):
     self._input = None
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
+    self._pool = Pool(processes=6)
+
 
   def __str__(self):
     return "SP {} has seen {} iterations".format(
@@ -116,6 +119,8 @@ class SpFacade(object):
     self._advance()
     if save:
       self.save()
+      # print "Saving asynchronously..."
+      # self._pool.apply_async(self.save)
 
 
   def getState(self, *args, **kwargs):
@@ -149,8 +154,6 @@ class SpFacade(object):
     :param kwargs:
     :return:
     """
-    start = time.time() * 1000
-
     iteration = None
     if "iteration" in kwargs:
       iteration = kwargs["iteration"]
@@ -167,13 +170,6 @@ class SpFacade(object):
       out[snap] = self._getSnapshot(
         snap, iteration=iteration, columnIndex=columnIndex
       )
-    stateIter = iteration
-    if stateIter is None:
-      stateIter = self.getIteration()
-    end = time.time() * 1000
-    print "SP state extraction (iteration {}) took {} ms".format(
-      stateIter, (end - start)
-    )
     return out
 
 
@@ -206,21 +202,9 @@ class SpFacade(object):
     self._iteration += 1
 
 
-  def _usePresentState(self, iteration):
-    return iteration is None or iteration == self.getIteration()
-
-
-  def _getSnapshot(self, name, iteration=None, columnIndex=None):
-    if name in self._state and iteration == self._iteration:
-      # print "returning cached {}".format(name)
-      return self._state[name]
-    else:
-      # print "conjuring {}".format(name)
-      funcName = "_conjure{}".format(name[:1].upper() + name[1:])
-      func = getattr(self, funcName)
-      result = func(iteration=iteration, columnIndex=columnIndex)
-      self._state[name] = result
-      return result
+  def _retrieveFromSp(self, iteration):
+    return self.isActive() \
+           and (iteration is None or iteration == self.getIteration())
 
 
   def _getZeroedColumns(self):
@@ -231,6 +215,18 @@ class SpFacade(object):
   def _getZeroedInput(self):
     numInputs = self.getParams()["numInputs"]
     return np.zeros(shape=(numInputs,))
+
+
+  def _getSnapshot(self, name, iteration=None, columnIndex=None):
+    # Use cache if we can.
+    if name in self._state and iteration == self._iteration:
+      return self._state[name]
+    else:
+      funcName = "_conjure{}".format(name[:1].upper() + name[1:])
+      func = getattr(self, funcName)
+      result = func(iteration=iteration, columnIndex=columnIndex)
+      self._state[name] = result
+      return result
 
 
   # None of the "_conjureXXX" functions below are directly called. They are all
@@ -244,7 +240,7 @@ class SpFacade(object):
 
 
   def _conjureInput(self, iteration=None, **kwargs):
-    if self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       return compressSdr(self._input)
     else:
       return self._redisClient.getLayerState(
@@ -253,7 +249,7 @@ class SpFacade(object):
 
 
   def _conjureActiveColumns(self, iteration=None, **kwargs):
-    if self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       return compressSdr(self._activeColumns)
     else:
       return self._redisClient.getLayerState(
@@ -262,7 +258,7 @@ class SpFacade(object):
 
 
   def _conjureOverlaps(self, iteration=None, **kwargs):
-    if self.isActive() and self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       return self._sp.getOverlaps().tolist()
     else:
       return self._redisClient.getLayerState(
@@ -290,14 +286,18 @@ class SpFacade(object):
 
   def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
     columns = []
-    if self.isActive() and self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       sp = self._sp
       for colIndex in range(0, sp.getNumColumns()):
         connectedSynapses = self._getZeroedInput()
         sp.getConnectedSynapses(colIndex, connectedSynapses)
         columns.append(np.nonzero(connectedSynapses)[0].tolist())
     else:
-      perms = self._conjurePermanences(iteration=iteration, columnIndex=columnIndex)
+      # Check the cache for permanences before calling to fetch them.
+      if SNAPS.PERMS in self._state:
+        perms = self._state[SNAPS.PERMS]
+      else:
+        perms = self._conjurePermanences(iteration=iteration, columnIndex=columnIndex)
       threshold = self.getParams()["synPermConnected"]
       for columnPerms in perms:
         colConnections = []
@@ -314,7 +314,7 @@ class SpFacade(object):
     out = []
     numColumns = self.getNumColumns()
     sp = self._sp
-    if self.isActive() and self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       for colIndex in range(0, numColumns):
         perms = self._getZeroedInput()
         sp.getPermanence(colIndex, perms)
@@ -328,12 +328,11 @@ class SpFacade(object):
         out = self._redisClient.getPerIterationState(
           self.getId(), SNAPS.PERMS, columnIndex
         )
-
     return out
 
 
   def _conjureActiveDutyCycles(self, iteration=None, **kwargs):
-    if self.isActive() and self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       sp = self._sp
       dutyCycles = self._getZeroedColumns()
       sp.getActiveDutyCycles(dutyCycles)
@@ -345,7 +344,7 @@ class SpFacade(object):
 
 
   def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
-    if self.isActive() and self._usePresentState(iteration):
+    if self._retrieveFromSp(iteration):
       sp = self._sp
       dutyCycles = self._getZeroedColumns()
       sp.getOverlapDutyCycles(dutyCycles)

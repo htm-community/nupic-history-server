@@ -5,7 +5,6 @@ import msgpack
 import redis
 
 from nupic_history import SpSnapshots as SNAPS
-from nupic_history.utils import compressSdr
 
 
 
@@ -41,12 +40,12 @@ class SpRedisClient(object):
 
     state = spHistory.getState(
       SNAPS.INPUT,
+      SNAPS.ACT_COL,
       SNAPS.POT_POOLS,
       # We are not going to save connections because they can be calculated from
       # permanence values and the synPermConnected param.
       # SNAPS.CON_SYN,
       SNAPS.PERMS,
-      SNAPS.ACT_COL,
       SNAPS.OVERLAPS,
       SNAPS.ACT_DC,
       SNAPS.OVP_DC,
@@ -57,8 +56,8 @@ class SpRedisClient(object):
     bytesSaved += self._saveSpPotentialPools(state, spid)
 
     end = time.time() * 1000
-    print "SP state serialization of {} bytes took {} ms".format(
-      bytesSaved, (end - start)
+    print "SP {} iteration {} state serialization of {} bytes took {} ms".format(
+      spid, iteration, bytesSaved, (end - start)
     )
 
 
@@ -98,22 +97,30 @@ class SpRedisClient(object):
 
   def getMaxIteration(self, spid):
     rds = self._redis
+    maxIteration = 0
     # We will use active columns keys to find the max iteration.
     keys = rds.keys("{}_?_activeColumns".format(spid))
-    return max([int(key.split("_")[1]) for key in keys])
+    if len(keys) > 0:
+      maxIteration = max([int(key.split("_")[1]) for key in keys])
+    return maxIteration
 
 
   def getLayerState(self, spid, stateType, iteration):
-    state = self._redis.get(self.GLOBAL_VALS.format(spid, iteration, stateType))
-    return msgpack.loads(state)[stateType]
+    key = self.GLOBAL_VALS.format(spid, iteration, stateType)
+    return self._getSnapshot(stateType, key)
 
 
   def getPerColumnState(self, spid, stateType, iteration, numColumns):
+    start = time.time() * 1000
     out = []
     for columnIndex in xrange(0, numColumns):
       key = self.COLUMN_VALS.format(spid, iteration, columnIndex, stateType)
-      column = msgpack.loads(self._redis.get(key))
-      out.append(column[stateType])
+      column = self._getSnapshot(stateType, key)
+      out.append(column)
+    end = time.time() * 1000
+    # print "Redis {} extraction from {} columns from {} took {} ms".format(
+    #   stateType, numColumns, spid, (end - start)
+    # )
     return out
 
 
@@ -126,9 +133,15 @@ class SpRedisClient(object):
 
 
   def getPotentialPools(self, spid):
-    pools = self._redis.get(self.SP_POT_POOLS.format(spid))
-    return msgpack.loads(pools)
+    return self._getSnapshot(SNAPS.POT_POOLS, self.SP_POT_POOLS.format(spid))
 
+
+  def _getSnapshot(self, stateType, key):
+    raw = self._redis.get(key)
+    out = []
+    if raw is not None:
+      out = msgpack.loads(raw)[stateType]
+    return out
 
   def _saveSpLayerValues(self, state, spid, iteration):
     # Active columns and inputs are small, and can be saved in one key for
@@ -137,16 +150,18 @@ class SpRedisClient(object):
     # These are always SDRS, so they can be compressed.
     # (Caveat: sometimes the input array is not sparse, but whatevs.)
     for outType in [SNAPS.ACT_COL, SNAPS.INPUT]:
-      key = self.GLOBAL_VALS.format(spid, iteration, outType)
-      payload = dict()
-      payload[outType] = state[outType]
-      bytesSaved += self._saveObject(key, payload)
+      if outType in state.keys():
+        key = self.GLOBAL_VALS.format(spid, iteration, outType)
+        payload = dict()
+        payload[outType] = state[outType]
+        bytesSaved += self._saveObject(key, payload)
     # Overlaps and duty cycles cannot be compressed.
     for outType in [SNAPS.ACT_DC, SNAPS.OVP_DC, SNAPS.OVERLAPS]:
-      key = self.GLOBAL_VALS.format(spid, iteration, outType)
-      payload = dict()
-      payload[outType] = state[outType]
-      bytesSaved += self._saveObject(key, payload)
+      if outType in state.keys():
+        key = self.GLOBAL_VALS.format(spid, iteration, outType)
+        payload = dict()
+        payload[outType] = state[outType]
+        bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
@@ -154,12 +169,13 @@ class SpRedisClient(object):
     # Permanences are big, so we save them in one key per column for easier
     # extraction by either column or iteration later.
     bytesSaved = 0
-    perms = state[SNAPS.PERMS]
-    for columnIndex, permanences in enumerate(perms):
-      key = self.COLUMN_VALS.format(spid, iteration, columnIndex, SNAPS.PERMS)
-      payload = dict()
-      payload[SNAPS.PERMS] = permanences
-      bytesSaved += self._saveObject(key, payload)
+    if SNAPS.PERMS in state.keys():
+      perms = state[SNAPS.PERMS]
+      for columnIndex, permanences in enumerate(perms):
+        key = self.COLUMN_VALS.format(spid, iteration, columnIndex, SNAPS.PERMS)
+        payload = dict()
+        payload[SNAPS.PERMS] = permanences
+        bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
@@ -167,12 +183,14 @@ class SpRedisClient(object):
   def _saveSpPotentialPools(self, state, spid):
     # Potental pool span columns, but they don't change over time. So we check
     # to see if we've saved it before.
-    key = self.SP_POT_POOLS.format(spid)
-    if len(self._redis.keys(key)) == 0:
-      payload = dict()
-      payload[SNAPS.POT_POOLS] = state[SNAPS.POT_POOLS]
-      return self._saveObject(key, payload)
-    return 0
+    bytesSaved = 0
+    if SNAPS.POT_POOLS in state.keys():
+      key = self.SP_POT_POOLS.format(spid)
+      if len(self._redis.keys(key)) == 0:
+        payload = dict()
+        payload[SNAPS.POT_POOLS] = state[SNAPS.POT_POOLS]
+        bytesSaved += self._saveObject(key, payload)
+    return bytesSaved
 
 
 
