@@ -70,6 +70,7 @@ class SPInterface:
     global spFacades
     params = json.loads(web.data())
     requestInput = web.input()
+    # TODO: Provide an interface to specify what internals should be saved.
     shouldSave = "save" in requestInput \
                   and requestInput["save"] == "true"
     detailedResponse = "detailed" in requestInput \
@@ -81,6 +82,9 @@ class SPInterface:
       "save": shouldSave,
       "facade": spFacade
     }
+
+    print "Created SP {} | Saving: {}".format(spId, shouldSave)
+
     web.header("Content-Type", "application/json")
     payload = {
       "id": spId,
@@ -139,7 +143,7 @@ class SPInterface:
     inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
     print "Entering SP compute cycle | Learning: {}".format(learn)
-    sp.compute(inputArray, learn=learn, save=shouldSave)
+    sp.compute(inputArray, learn=learn)
 
     response = sp.getState(*stateSnapshots)
 
@@ -163,8 +167,6 @@ class History:
     connections = sp.getState(
       SNAPS.CON_SYN, columnIndex=columnIndex
     )[SNAPS.CON_SYN]
-    # connections = sp.getConnectionHistoryForColumn(columnIndex)
-    # permanences = sp.getPermanenceHistoryForColumn(columnIndex)
     return json.dumps({
       "connections": connections,
       "permanences": permanences
