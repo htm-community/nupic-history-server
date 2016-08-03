@@ -1,4 +1,3 @@
-import time
 import uuid
 from multiprocessing import Pool
 
@@ -10,13 +9,14 @@ from nupic_history.utils import compressSdr
 
 class SpFacade(object):
 
-  def __init__(self, sp, redisClient):
+  def __init__(self, sp, redisClient, save=None):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
 
     :param sp: Either an instance of Spatial Pooler or a SP id string
     :param redisClient: Instantiated Redis client
+    :param save: list of SpSnapshots to save with each compute step
     """
     self._redisClient = redisClient
     if isinstance(sp, basestring):
@@ -32,6 +32,8 @@ class SpFacade(object):
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
     self._pool = Pool(processes=6)
+    self._save = save
+    self._adjustSavedSnapshots()
 
 
   def __str__(self):
@@ -103,13 +105,12 @@ class SpFacade(object):
     return params
 
 
-  def compute(self, encoding, learn=False, save=False):
+  def compute(self, encoding, learn=False):
     """
     Pass-through to Spatial Pooler's compute() function, with the addition of
     the save option.
     :param encoding: encoding to pass to the sp
     :param learn: whether sp will learn on this compute cycle
-    :param save: whether the sp state will be saved to Redis after the cycle
     """
     sp = self._sp
     columns = np.zeros(sp.getNumColumns(), dtype="uint32")
@@ -117,10 +118,7 @@ class SpFacade(object):
     self._input = encoding.tolist()
     self._activeColumns = columns.tolist()
     self._advance()
-    if save:
-      self.save()
-      # print "Saving asynchronously..."
-      # self._pool.apply_async(self.save)
+    self.save()
 
 
   def getState(self, *args, **kwargs):
@@ -177,9 +175,17 @@ class SpFacade(object):
     """
     Saves the current state of the SP to Redis.
     """
-    if not self.isActive():
-      raise RuntimeError("Cannot save an inactive SP Facade.")
-    self._redisClient.saveSpState(self)
+    if self._save is not None and len(self._save) > 0:
+      if not self.isActive():
+        raise RuntimeError("Cannot save an inactive SP Facade.")
+      if self.getInput() is None:
+        raise ValueError(
+          "Cannot save SP state because it has never seen input.")
+      spid = self.getId()
+      params = self.getParams()
+      iteration = self.getIteration()
+      state = self.getState(*self._save)
+      self._redisClient.saveSpState(spid, params, iteration, state)
 
 
   def delete(self):
@@ -195,6 +201,18 @@ class SpFacade(object):
     :return: [int] number of columns in the SP
     """
     return self.getParams()["numColumns"]
+
+
+  def _adjustSavedSnapshots(self):
+    # If user specified to save connected synapses, we'll switch it to
+    # permanences. We are actually not saving connected synapses at all. They
+    # are always calculated from permanences.
+    save = self._save
+    if save is not None and len(save) > 0 and SNAPS.CON_SYN in save:
+      save.remove(SNAPS.CON_SYN)
+      if SNAPS.PERMS not in save:
+        save.append(SNAPS.PERMS)
+
 
 
   def _advance(self):
@@ -218,7 +236,7 @@ class SpFacade(object):
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):
-    # Use cache if we can.
+    # Use the cache if we can.
     if name in self._state and iteration == self._iteration:
       return self._state[name]
     else:

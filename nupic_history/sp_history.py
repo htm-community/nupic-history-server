@@ -24,14 +24,15 @@ class SpHistory(object):
     ]
 
 
-  def create(self, sp, save=False):
+  def create(self, sp, save=None):
     """
     Creates a new active SP Facade for the given SP. Does not actually save
     anything yet.
     :param sp: SpatialPooler instance
+    :param save: list of SpSnapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
-    return SpFacade(sp, self._redisClient)
+    return SpFacade(sp, self._redisClient, save=save)
 
 
   def get(self, spId):

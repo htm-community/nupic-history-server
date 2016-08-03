@@ -11,13 +11,10 @@ from nupic_history import SpHistory, SpSnapshots as SNAPS
 spHistory = SpHistory()
 
 
-def runSaveTest():
-  inputSize = 600
-  outputSize = 2048
-
-  sp = SP(
+def createSpatialPooler(inputSize):
+  return SP(
     inputDimensions=(inputSize,),
-    columnDimensions=(outputSize,),
+    columnDimensions=(2048,),
     potentialRadius=16,
     potentialPct=0.85,
     globalInhibition=True,
@@ -35,26 +32,41 @@ def runSaveTest():
     spVerbosity=0,
     wrapAround=True
   )
-  # Totally nukes any SP History data that exists in Redis.
+
+
+def runSaveTest():
   spHistory.nuke()
 
-  # Create a facade around the SP that saves history as it runs.
-  sp = spHistory.create(sp)
+  inputSize = 600
 
-  # If the SP Facade is "active" that means it has a life spatial pooler. If it
-  # is not active, it cannot compute, only playback the history.
-  assert sp.isActive()
+  rawSp = createSpatialPooler(inputSize)
+
+  sp = spHistory.create(
+    rawSp,
+    # Declaring what internal data should for each compute cycle.
+    save=[
+      SNAPS.INPUT,
+      SNAPS.ACT_COL,
+      SNAPS.CON_SYN,
+      SNAPS.PERMS,
+      SNAPS.OVERLAPS,
+      SNAPS.ACT_DC,
+      SNAPS.OVP_DC,
+      SNAPS.POT_POOLS,
+    ]
+  )
 
   start = time.time()
 
   iterations = 10
+
   for _ in range(0, iterations):
     encoding = np.zeros(shape=(inputSize,))
     for j, _ in enumerate(encoding):
       if random() < 0.1:
         encoding[j] = 1
     # For each compute cycle, save the SP state to Redis for playback later.
-    sp.compute(encoding, learn=True, save=True)
+    sp.compute(encoding, learn=True)
 
   end = time.time()
 
@@ -64,31 +76,45 @@ def runSaveTest():
   return sp.getId()
 
 
-def runFetchTest(spid):
-  print "Fetching sp {}".format(spid)
-  sp = spHistory.get(spid)
-  # This one is not active, but just an interface for retrieving the state of
-  # the SP when it was active.
-  assert not sp.isActive()
-
-  try:
-    sp.save()
-  except RuntimeError:
-    print "Can't save inactive facade."
-
+def retrieveByIteration(sp):
   start = time.time()
   iterations = sp.getIteration() + 1
   # We can playback the life of the SP.
   for i in range(0, iterations):
-    print "\niteration {}".format(i)
+    print "iteration {}".format(i)
     for snap in [SNAPS.INPUT, SNAPS.ACT_COL]:
       state = sp.getState(snap, iteration=i)[snap]
-      print "\t{} has {} active bits out of {}".format(snap, len(state["indices"]), state["length"])
-    for snap in [SNAPS.POT_POOLS, SNAPS.OVERLAPS, SNAPS.PERMS, SNAPS.CON_SYN, SNAPS.ACT_DC, SNAPS.OVP_DC]:
-      print "\t{} for {} columns".format(snap, len(sp.getState(snap, iteration=i)[snap]))
-
+      print "\t{} has {} active bits out of {}".format(snap,
+                                                       len(state["indices"]),
+                                                       state["length"])
+    for snap in [SNAPS.POT_POOLS, SNAPS.OVERLAPS, SNAPS.PERMS, SNAPS.CON_SYN,
+                 SNAPS.ACT_DC, SNAPS.OVP_DC]:
+      print "\t{} for {} columns".format(snap, len(
+        sp.getState(snap, iteration=i)[snap]))
   end = time.time()
-  print "\nRETRIEVAL: {} iterations took {} seconds.".format(iterations, (end - start))
+  print "\nRETRIEVAL: {} iterations took {} seconds.".format(
+    iterations, (end - start)
+  )
+
+
+def retrievePermanencesByColumn(sp, column):
+  start = time.time()
+  # We can playback the life of one column.
+  data = sp.getState(SNAPS.PERMS, columnIndex=column)[SNAPS.PERMS]
+  end = time.time()
+  print "\nRETRIEVAL of column {} ({} iterations) took {} seconds.".format(
+    column, sp.getIteration(), (end - start)
+  )
+
+
+def runFetchTest(spid):
+  print "Fetching sp {}".format(spid)
+  sp = spHistory.get(spid)
+
+  retrieveByIteration(sp)
+
+  retrievePermanencesByColumn(sp, 0)
+
 
 if __name__ == "__main__":
   spid = runSaveTest()

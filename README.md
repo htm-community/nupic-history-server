@@ -51,8 +51,21 @@ sp = nupic.research.spatial_pooler.SpatialPooler(
 # Create the top-level SpHistory object.
 spHistory = SpHistory()
 
+# Decide what data you want to snapshot. Each one is optional.
+snapshots = [
+  SpSnapshots.INPUT,        # input encoding
+  SpSnapshots.ACT_COL,      # active columns
+  SpSnapshots.PERMS,        # permanences for each column to the input space
+  SpSnapshots.CON_SYN,      # connected synapses for each column
+                            #   (computed from permanences, not actually saved)
+  SpSnapshots.OVERLAPS,     # overlaps for each column
+  SpSnapshots.ACT_DC,       # active duty cycles
+  SpSnapshots.OVP_DC,       # overlap duty cycles
+  SpSnapshots.POT_POOLS,    # potential pools for each column
+]
+
 # Create a facade around the SP that saves history as it runs.
-sp = spHistory.create(sp)
+sp = spHistory.create(sp, save=snapshots)
 
 # Feed in 10 random encodings with 10% sparsity.
 for _ in range(0, 10):
@@ -60,11 +73,11 @@ for _ in range(0, 10):
   for j, _ in enumerate(encoding):
     if random() < 0.1:
       encoding[j] = 1
-  # For each compute cycle, save the SP state to Redis for playback later.
-  sp.compute(encoding, learn=True, save=True)
+  # Each compute cycle will save the specified snapshots into Redis.
+  sp.compute(encoding, learn=True)
 
 # This SP's history can be retrieved later through this id:
-spFacadeId = sp.getId()
+spid = sp.getId()
 ```
 
 Now this SP's state has been saved for 10 iterations. Using the returned ID, we can retrieve it later and walk through each iteration with complete access to the SP's internals.
@@ -80,13 +93,16 @@ for i in range(0, lastIteration + 1):
   print "\niteration {}".format(i)
   # We're just printing the keys here, because some of these objects are very 
   # large.
-  print sp.getState(SpSnapshots.INPUT, iteration=i).keys()
-  print sp.getState(SpSnapshots.ACT_COL, iteration=i).keys()
-  print sp.getState(SpSnapshots.POT_POOLS, iteration=i).keys()
-  print sp.getState(SpSnapshots.OVERLAPS, iteration=i).keys()
-  print sp.getState(SpSnapshots.PERMS, iteration=i).keys()
-  print sp.getState(SpSnapshots.ACT_DC, iteration=i).keys()
-  print sp.getState(SpSnapshots.OVP_DC, iteration=i).keys()
-  print sp.getState(SpSnapshots.CON_SYN, iteration=i).keys()
+  input             = sp.getState(SpSnapshots.INPUT, iteration=i)
+  activeColumns     = sp.getState(SpSnapshots.ACT_COL, iteration=i)
+  potentialPools    = sp.getState(SpSnapshots.POT_POOLS, iteration=i)
+  overlaps          = sp.getState(SpSnapshots.OVERLAPS, iteration=i)
+  permanences       = sp.getState(SpSnapshots.PERMS, iteration=i)
+  activeDutyCycles  = sp.getState(SpSnapshots.ACT_DC, iteration=i)
+  overlapDutyCycles = sp.getState(SpSnapshots.OVP_DC, iteration=i)
+  connectedSynapses = sp.getState(SpSnapshots.CON_SYN, iteration=i)
 
+# We can also get the history of only one column 
+# (for permanences, connected synapses)
+column42PermHistory = sp.getState(SpSnapshots.PERMS, column=42)
 ```

@@ -26,31 +26,11 @@ class SpRedisClient(object):
     return msgpack.loads(self._redis.get(self.SP_LIST))["sps"]
 
 
-  def saveSpState(self, spHistory):
+  def saveSpState(self, spid, spParams, iteration, state):
     start = time.time() * 1000
 
-    self._updateRegistry(spHistory)
-
+    self._updateRegistry(spid, spParams)
     bytesSaved = 0
-    spid = spHistory.getId()
-    iteration = spHistory.getIteration()
-
-    if spHistory.getInput() is None:
-      raise ValueError("Cannot save SP state because it has never seen input.")
-
-    state = spHistory.getState(
-      SNAPS.INPUT,
-      SNAPS.ACT_COL,
-      SNAPS.POT_POOLS,
-      # We are not going to save connections because they can be calculated from
-      # permanence values and the synPermConnected param.
-      # SNAPS.CON_SYN,
-      SNAPS.PERMS,
-      SNAPS.OVERLAPS,
-      SNAPS.ACT_DC,
-      SNAPS.OVP_DC,
-    )
-
     bytesSaved += self._saveSpLayerValues(state, spid, iteration)
     bytesSaved += self._saveSpColumnPermanences(state, spid, iteration)
     bytesSaved += self._saveSpPotentialPools(state, spid)
@@ -111,24 +91,25 @@ class SpRedisClient(object):
 
 
   def getPerColumnState(self, spid, stateType, iteration, numColumns):
-    start = time.time() * 1000
     out = []
-    for columnIndex in xrange(0, numColumns):
-      key = self.COLUMN_VALS.format(spid, iteration, columnIndex, stateType)
-      column = self._getSnapshot(stateType, key)
-      out.append(column)
-    end = time.time() * 1000
-    # print "Redis {} extraction from {} columns from {} took {} ms".format(
-    #   stateType, numColumns, spid, (end - start)
-    # )
+    # Before making a DB call for every column, let's ensure that there are
+    # values stored for this type of snapshot.
+    numKeys = len(self._redis.keys(
+      self.COLUMN_VALS.format(spid, "*", "*", stateType)
+    ))
+    if numKeys > 0:
+      for columnIndex in xrange(0, numColumns):
+        key = self.COLUMN_VALS.format(spid, iteration, columnIndex, stateType)
+        column = self._getSnapshot(stateType, key)
+        out.append(column)
     return out
 
 
   def getPerIterationState(self, spid, stateType, columnIndex):
     out = []
     searchString = self.COLUMN_VALS.format(spid, "*", columnIndex, stateType)
-    for column in msgpack.loads(self.redis.get(searchString)):
-      out.append(column[stateType])
+    for iterKey in self._redis.keys(searchString):
+      out.append(self._getSnapshot(stateType, iterKey))
     return out
 
 
@@ -142,6 +123,7 @@ class SpRedisClient(object):
     if raw is not None:
       out = msgpack.loads(raw)[stateType]
     return out
+
 
   def _saveSpLayerValues(self, state, spid, iteration):
     # Active columns and inputs are small, and can be saved in one key for
@@ -194,11 +176,10 @@ class SpRedisClient(object):
 
 
 
-  def _updateRegistry(self, spHistory):
+  def _updateRegistry(self, spid, spParams):
     # All saved Spatial Pooler information is keyed by an index and saved into
     # a key defined by SP_LIST.
     spList = self._redis.get(self.SP_LIST)
-    spid = spHistory.getId()
     if spList is None:
       spList = {"sps": [spid]}
     else:
@@ -207,7 +188,7 @@ class SpRedisClient(object):
         spList["sps"].append(spid)
     self._saveObject(self.SP_LIST, spList)
     params = {
-      "params": spHistory.getParams()
+      "params": spParams
     }
     self._saveObject(self.SP_PARAMS.format(spid), params)
 
