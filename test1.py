@@ -118,4 +118,4 @@ def runFetchTest(spid):
 
 if __name__ == "__main__":
   spid = runSaveTest()
-  runFetchTest(spid)
+  # runFetchTest(spid)

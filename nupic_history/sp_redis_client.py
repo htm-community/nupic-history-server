@@ -1,10 +1,54 @@
 import sys
 import time
-import msgpack
+import threading
+import Queue
 
+import msgpack
 import redis
 
 from nupic_history import SpSnapshots as SNAPS
+
+
+
+# def buildWorkerPool(queue, redisClient, size):
+#   workers = []
+#   for _ in range(size):
+#     worker = ThreadedRedisSave(queue, redisClient)
+#     worker.setDaemon(True)
+#     worker.start()
+#     workers.append(worker)
+#   return workers
+
+
+# class ThreadedRedisSave(threading.Thread):
+#
+#   def __init__(self, queue, redisClient):
+#     threading.Thread.__init__(self)
+#     self._queue = queue
+#     self._redis = redisClient
+#
+#   def run(self):
+#     while True:
+#       k, v = self._queue.get()
+#       if k == 'quit':
+#         break
+#       self._redis.set(k, v)
+#       self._queue.task_done()
+#     print 'Thread death.'
+
+
+class ThreadedRedisSave(threading.Thread):
+
+  def __init__(self, queue, redisClient):
+    threading.Thread.__init__(self)
+    self._queue = queue
+    self._redis = redisClient
+
+  def run(self):
+    while True:
+      k, v = self._queue.get()
+      self._redis.set(k, v)
+      self._queue.task_done()
 
 
 
@@ -20,6 +64,13 @@ class SpRedisClient(object):
 
   def __init__(self, host="localhost", port=6379):
     self._redis = redis.Redis(host=host, port=port)
+    self._queue = Queue.Queue()
+    # Start threads for saving.
+    for i in range(8):
+      t = ThreadedRedisSave(self._queue, self._redis)
+      # t.setDaemon(True)
+      t.start()
+    # self._saveWorkers = buildWorkerPool(self._queue, self._redis, 4)
 
 
   def listSpIds(self):
@@ -34,6 +85,12 @@ class SpRedisClient(object):
     bytesSaved += self._saveSpLayerValues(state, spid, iteration)
     bytesSaved += self._saveSpColumnPermanences(state, spid, iteration)
     bytesSaved += self._saveSpPotentialPools(state, spid)
+
+    # self._queue.join()
+
+    # self._queue.put(('quit', None))
+    # for worker in self._saveWorkers:
+    #   worker.join()
 
     end = time.time() * 1000
     print "SP {} iteration {} state serialization of {} bytes took {} ms".format(
@@ -198,5 +255,6 @@ class SpRedisClient(object):
     # Using explicit separators keeps unnecessary whitespace out of Redis.
     msgpackString = msgpack.dumps(obj)
     size = sys.getsizeof(msgpackString)
-    self._redis.set(key, msgpackString)
+    # self._redis.set(key, msgpackString)
+    self._queue.put((key, msgpackString))
     return size
