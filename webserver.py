@@ -1,5 +1,6 @@
+import sys
 import time
-import json
+import simplejson as json
 
 import numpy as np
 import web
@@ -31,6 +32,7 @@ def templateNameToTitle(name):
   return title.title()
 
 
+
 class Index:
 
 
@@ -52,17 +54,6 @@ class Client:
       )
 
 
-def getSpDetails(requestInput, sp):
-  kwargs = {}
-  for param in SNAPS.listValues():
-    key = "get{}{}".format(param[:1].upper(), param[1:])
-    kwargs[key] = param in requestInput and requestInput[param] == "true"
-  print kwargs
-  state = sp.getState(**kwargs)
-  # Compress any SDRs.
-  return state
-
-
 class SPInterface:
 
 
@@ -70,40 +61,36 @@ class SPInterface:
     global spFacades
     params = json.loads(web.data())
     requestInput = web.input()
-    # TODO: Provide an interface to specify what internals should be saved.
-    shouldSave = "save" in requestInput \
-                  and requestInput["save"] == "true"
-    detailedResponse = "detailed" in requestInput \
-                  and requestInput["detailed"] == "true"
+    # We will always return the initial state of columns and overlaps because
+    # they are cheap.
+    saveSnapshots = [
+      SNAPS.ACT_COL,
+      SNAPS.OVERLAPS
+    ]
+    if "save" in requestInput and len(requestInput["save"]) > 0:
+      saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
+      # Remove duplicates that might have been added in the request.
+      saveSnapshots = list(set(saveSnapshots))
+
     sp = SP(**params)
-    spFacade = spHistory.create(sp)
+    spFacade = spHistory.create(sp, save=saveSnapshots)
     spId = spFacade.getId()
-    spFacades[spId] = {
-      "save": shouldSave,
-      "facade": spFacade
-    }
+    spFacades[spId] = spFacade
 
-    print "Created SP {} | Saving: {}".format(spId, shouldSave)
+    print "Created SP {} | Saving: {}".format(spId, saveSnapshots)
 
-    web.header("Content-Type", "application/json")
     payload = {
-      "id": spId,
+      "meta": {
+        "id": spId,
+        "saving": saveSnapshots
+      }
     }
-    # We will always return the initial state of columns and overlaps becasue
-    # they are cheap. We'll only get the extra internals if
-    snapshots = [SNAPS.ACT_COL, SNAPS.OVERLAPS]
-    if detailedResponse:
-      snapshots += [
-        SNAPS.POT_POOLS, SNAPS.CON_SYN, SNAPS.PERMS
-      ]
-    spState = spFacade.getState(*snapshots)
+    spState = spFacade.getState(*saveSnapshots)
     for key in spState:
       payload[key] = spState[key]
+
+    web.header("Content-Type", "application/json")
     return json.dumps(payload)
-
-
-  def OPTIONS(self):
-    return web.ok
 
 
   def PUT(self):
@@ -111,17 +98,13 @@ class SPInterface:
     requestInput = web.input()
     encoding = web.data()
     stateSnapshots = [
-      SNAPS.INPUT,
       SNAPS.ACT_COL,
-      SNAPS.OVERLAPS
     ]
 
-    if "getConnectedSynapses" in requestInput \
-                  and requestInput["getConnectedSynapses"] == "true":
-      stateSnapshots.append(SNAPS.CON_SYN)
-    if "potentialPools" in requestInput \
-               and requestInput["potentialPools"] == "true":
-      stateSnapshots.append(SNAPS.POT_POOLS)
+    for snap in SNAPS.listValues():
+      getString = "get{}{}".format(snap[:1].upper(), snap[1:])
+      if getString in requestInput and requestInput[getString] == "true":
+        stateSnapshots.append(snap)
 
     if "id" not in requestInput:
       print "Request must include a spatial pooler id."
@@ -133,8 +116,7 @@ class SPInterface:
       print "Unknown SP id {}!".format(spId)
       return web.badrequest()
 
-    sp = spFacades[spId]["facade"]
-    shouldSave = spFacades[spId]["save"]
+    sp = spFacades[spId]
 
     learn = True
     if "learn" in requestInput:

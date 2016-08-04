@@ -32,7 +32,7 @@ class SpFacade(object):
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
     self._pool = Pool(processes=6)
-    self._save = save
+    self._save = save[:]
     self._adjustSavedSnapshots()
 
 
