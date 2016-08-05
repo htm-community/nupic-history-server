@@ -1,5 +1,5 @@
 import uuid
-from multiprocessing import Pool
+import multiprocessing
 
 import numpy as np
 
@@ -31,7 +31,6 @@ class SpFacade(object):
     self._input = None
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
-    self._pool = Pool(processes=6)
     self._save = save[:]
     self._adjustSavedSnapshots()
 
@@ -105,7 +104,7 @@ class SpFacade(object):
     return params
 
 
-  def compute(self, encoding, learn=False):
+  def compute(self, encoding, learn=False, multiprocess=True):
     """
     Pass-through to Spatial Pooler's compute() function, with the addition of
     the save option.
@@ -118,7 +117,11 @@ class SpFacade(object):
     self._input = encoding.tolist()
     self._activeColumns = columns.tolist()
     self._advance()
-    self.save()
+    if multiprocess:
+      p = multiprocessing.Process(target=self.save)
+      p.start()
+    else:
+      self.save()
 
 
   def getState(self, *args, **kwargs):
