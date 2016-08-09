@@ -20,6 +20,7 @@ urls = (
   "/_sp/", "SPInterface",
   "/_sp/(.+)/history/(.+)", "History",
 )
+web.config.debug = False
 app = web.application(urls, globals())
 render = web.template.render("tmpl/")
 
@@ -63,14 +64,19 @@ class SPInterface:
     requestInput = web.input()
     # We will always return the initial state of columns and overlaps because
     # they are cheap.
-    saveSnapshots = [
+    returnSnapshots = [
       SNAPS.ACT_COL,
       SNAPS.OVERLAPS
     ]
-    if "save" in requestInput and len(requestInput["save"]) > 0:
-      saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
-      # Remove duplicates that might have been added in the request.
-      saveSnapshots = list(set(saveSnapshots))
+    saveSnapshots = []
+    if __name__ == '__main__':
+      if "save" in requestInput and len(requestInput["save"]) > 0:
+        saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
+        # Be sure to also return any snapshots that were specified to be saved.
+        returnSnapshots += saveSnapshots
+        # Remove potential duplicates from both
+        returnSnapshots = list(set(returnSnapshots))
+        saveSnapshots = list(set(saveSnapshots))
 
     sp = SP(**params)
     spFacade = spHistory.create(sp, save=saveSnapshots)
@@ -82,10 +88,10 @@ class SPInterface:
     payload = {
       "meta": {
         "id": spId,
-        "saving": saveSnapshots
+        "saving": returnSnapshots
       }
     }
-    spState = spFacade.getState(*saveSnapshots)
+    spState = spFacade.getState(*returnSnapshots)
     for key in spState:
       payload[key] = spState[key]
 
@@ -110,13 +116,13 @@ class SPInterface:
       print "Request must include a spatial pooler id."
       return web.badrequest()
 
-    spId = requestInput["id"]
+    spid = requestInput["id"]
 
-    if spId not in spFacades.keys():
-      print "Unknown SP id {}!".format(spId)
+    if spid not in spFacades.keys():
+      print "Unknown SP id {}!".format(spid)
       return web.badrequest()
 
-    sp = spFacades[spId]
+    sp = spFacades[spid]
 
     learn = True
     if "learn" in requestInput:
@@ -124,7 +130,7 @@ class SPInterface:
 
     inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
-    print "Entering SP compute cycle | Learning: {}".format(learn)
+    print "Entering SP {} compute cycle | Learning: {}".format(spid, learn)
     sp.compute(inputArray, learn=learn)
 
     response = sp.getState(*stateSnapshots)
