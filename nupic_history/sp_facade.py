@@ -31,7 +31,9 @@ class SpFacade(object):
     self._input = None
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
-    self._save = save[:]
+    self._save = None
+    if save is not None:
+      self._save = save[:]
     self._adjustSavedSnapshots()
 
 
@@ -223,9 +225,11 @@ class SpFacade(object):
     self._iteration += 1
 
 
-  def _retrieveFromSp(self, iteration):
+  def _retrieveFromSp(self, iteration, columnIndex=None):
     return self.isActive() \
-           and (iteration is None or iteration == self.getIteration())
+           and (
+             (iteration is None and columnIndex is None)
+             or iteration == self.getIteration())
 
 
   def _getZeroedColumns(self):
@@ -307,7 +311,7 @@ class SpFacade(object):
 
   def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
     columns = []
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromSp(iteration, columnIndex):
       sp = self._sp
       for colIndex in range(0, sp.getNumColumns()):
         connectedSynapses = self._getZeroedInput()
@@ -335,7 +339,7 @@ class SpFacade(object):
     out = []
     numColumns = self.getNumColumns()
     sp = self._sp
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromSp(iteration, columnIndex):
       for colIndex in range(0, numColumns):
         perms = self._getZeroedInput()
         sp.getPermanence(colIndex, perms)

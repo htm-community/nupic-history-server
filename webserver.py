@@ -148,17 +148,11 @@ class SPInterface:
 class History:
 
   def GET(self, spId, columnIndex):
-    sp = spFacades[spId]["facade"]
-    permanences = sp.getState(
-      SNAPS.PERMS, columnIndex=columnIndex
-    )[SNAPS.PERMS]
-    connections = sp.getState(
-      SNAPS.CON_SYN, columnIndex=columnIndex
-    )[SNAPS.CON_SYN]
-    return json.dumps({
-      "connections": connections,
-      "permanences": permanences
-    })
+    sp = spFacades[spId]
+    history = sp.getState(
+      SNAPS.PERMS, columnIndex=int(columnIndex)
+    )
+    return json.dumps(history)
 
 if __name__ == "__main__":
   app.run()
