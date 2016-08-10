@@ -351,7 +351,7 @@ class SpFacade(object):
         )
       else:
         out = self._redisClient.getPerIterationState(
-          self.getId(), SNAPS.PERMS, columnIndex
+          self.getId(), SNAPS.PERMS, columnIndex, self.getIteration()
         )
     return out
 

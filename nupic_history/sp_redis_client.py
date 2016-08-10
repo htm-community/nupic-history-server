@@ -105,11 +105,19 @@ class SpRedisClient(object):
     return out
 
 
-  def getPerIterationState(self, spid, stateType, columnIndex):
+  def getPerIterationState(self, spid, stateType, columnIndex, iterations):
     out = []
     searchString = self.COLUMN_VALS.format(spid, "*", columnIndex, stateType)
-    for iterKey in self._redis.keys(searchString):
-      out.append(self._getSnapshot(stateType, iterKey))
+    keys = sorted(self._redis.keys(searchString))
+    from pprint import pprint; pprint(keys)
+    for iteration in xrange(0, iterations):
+      possibleKey = self.COLUMN_VALS.format(
+        spid, iteration, columnIndex, stateType
+      )
+      found = None
+      if possibleKey in keys:
+        found = self._getSnapshot(stateType, possibleKey)
+      out.append(found)
     return out
 
 
