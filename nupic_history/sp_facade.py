@@ -268,25 +268,31 @@ class SpFacade(object):
     if self._retrieveFromSp(iteration):
       return compressSdr(self._input)
     else:
-      return self._redisClient.getLayerState(
+      return self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.INPUT, iteration
       )
 
 
-  def _conjureActiveColumns(self, iteration=None, **kwargs):
-    if self._retrieveFromSp(iteration):
-      return compressSdr(self._activeColumns)
+  def _conjureActiveColumns(self, iteration=None, columnIndex=None):
+    if self._retrieveFromSp(iteration, columnIndex):
+      out = compressSdr(self._activeColumns)
     else:
-      return self._redisClient.getLayerState(
-        self.getId(), SNAPS.ACT_COL, iteration
-      )
+      if columnIndex is None:
+        out = self._redisClient.getLayerState(
+          self.getId(), SNAPS.ACT_COL, iteration
+        )
+      else:
+        out = self._redisClient.getActiveColumnsByColumn(
+          self.getId(), columnIndex, self.getIteration() + 1
+        )
+    return out
 
 
   def _conjureOverlaps(self, iteration=None, **kwargs):
     if self._retrieveFromSp(iteration):
       return self._sp.getOverlaps().tolist()
     else:
-      return self._redisClient.getLayerState(
+      return self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.OVERLAPS, iteration
       )
 
@@ -346,12 +352,12 @@ class SpFacade(object):
         out.append([round(perm, 2) for perm in perms.tolist()])
     else:
       if columnIndex is None:
-        out = self._redisClient.getPerColumnState(
+        out = self._redisClient.getStateByIteration(
           self.getId(), SNAPS.PERMS, iteration, numColumns
         )
       else:
-        out = self._redisClient.getPerIterationState(
-          self.getId(), SNAPS.PERMS, columnIndex, self.getIteration()
+        out = self._redisClient.getStatebyColumn(
+          self.getId(), SNAPS.PERMS, columnIndex, self.getIteration() + 1
         )
     return out
 
@@ -363,7 +369,7 @@ class SpFacade(object):
       sp.getActiveDutyCycles(dutyCycles)
       return dutyCycles.tolist()
     else:
-      return self._redisClient.getLayerState(
+      return self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.ACT_DC, iteration
       )
 
@@ -375,6 +381,6 @@ class SpFacade(object):
       sp.getOverlapDutyCycles(dutyCycles)
       return dutyCycles.tolist()
     else:
-      return self._redisClient.getLayerState(
+      return self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.OVP_DC, iteration
       )

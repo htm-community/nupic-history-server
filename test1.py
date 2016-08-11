@@ -9,12 +9,13 @@ from nupic_history import SpHistory, SpSnapshots as SNAPS
 
 
 spHistory = SpHistory()
+iterations = 10
 
 
 def createSpatialPooler(inputSize):
   return SP(
     inputDimensions=(inputSize,),
-    columnDimensions=(2048,),
+    columnDimensions=(200,),
     potentialRadius=16,
     potentialPct=0.85,
     globalInhibition=True,
@@ -37,7 +38,7 @@ def createSpatialPooler(inputSize):
 def runSaveTest():
   spHistory.nuke()
 
-  inputSize = 600
+  inputSize = 3
 
   rawSp = createSpatialPooler(inputSize)
 
@@ -58,7 +59,6 @@ def runSaveTest():
 
   start = time.time()
 
-  iterations = 10
 
   for _ in range(0, iterations):
     encoding = np.zeros(shape=(inputSize,))
@@ -72,8 +72,7 @@ def runSaveTest():
 
   print "\nSTORAGE: {} iterations took {} seconds.\n\n".format(iterations, (end - start))
 
-  # This SP's history can be retrieved with an id.
-  return sp.getId()
+  return sp
 
 
 def retrieveByIteration(sp):
@@ -97,25 +96,41 @@ def retrieveByIteration(sp):
   )
 
 
-def retrievePermanencesByColumn(sp, column):
+def retrieveSnapshotByColumn(snapshot, sp, column):
   start = time.time()
   # We can playback the life of one column.
-  data = sp.getState(SNAPS.PERMS, columnIndex=column)[SNAPS.PERMS]
+  data = sp.getState(snapshot, columnIndex=column)[snapshot]
   end = time.time()
-  print "\nRETRIEVAL of column {} ({} iterations) took {} seconds.".format(
-    column, sp.getIteration(), (end - start)
+  print "\nRETRIEVAL of column {} {} ({} iterations) took {} seconds.".format(
+    column, snapshot, sp.getIteration(), (end - start)
   )
+  return data
 
 
-def runFetchTest(spid):
+def runFetchTest(sp):
+  spid = sp.getId()
   print "Fetching sp {}".format(spid)
   sp = spHistory.get(spid)
+  history = sp.getState(
+    SNAPS.PERMS, SNAPS.CON_SYN, columnIndex=0
+  )
+  print history
+  # retrieveByIteration(sp)
+  # columnHistory = retrieveSnapshotByColumn(SNAPS.PERMS, sp, 0)
+  # assert len(columnHistory) == iterations
 
-  retrieveByIteration(sp)
 
-  retrievePermanencesByColumn(sp, 0)
+def runHistoryTest():
+  sp = runSaveTest()
+  time.sleep(1)
+  history = sp.getState(
+    SNAPS.PERMS, SNAPS.ACT_COL, columnIndex=199
+  )
+  print history
 
 
 if __name__ == "__main__":
-  spid = runSaveTest()
-  runFetchTest(spid)
+  runHistoryTest()
+  # spid = runSaveTest()
+  # time.sleep(5)
+  # runFetchTest(spid)

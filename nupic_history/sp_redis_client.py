@@ -85,12 +85,37 @@ class SpRedisClient(object):
     return maxIteration
 
 
-  def getLayerState(self, spid, stateType, iteration):
+  def getLayerStateByIteration(self, spid, stateType, iteration):
     key = self.GLOBAL_VALS.format(spid, iteration, stateType)
     return self._getSnapshot(stateType, key)
 
 
-  def getPerColumnState(self, spid, stateType, iteration, numColumns):
+  def getActiveColumnsByColumn(self, spid, columnIndex, maxIteration):
+    print columnIndex
+    print type(columnIndex)
+    out = []
+    searchKey = self.GLOBAL_VALS.format(spid, "*", SNAPS.ACT_COL)
+    print "searching for {}".format(searchKey)
+    keys = self._redis.keys(searchKey)
+    for iteration in xrange(0, maxIteration):
+      possibleKey = self.GLOBAL_VALS.format(spid, iteration, SNAPS.ACT_COL)
+      print possibleKey
+      found = None
+      if possibleKey in keys:
+        activeColumns = self._getSnapshot(SNAPS.ACT_COL, possibleKey)
+        print activeColumns
+        if columnIndex in activeColumns["indices"]:
+          found = 1
+        else:
+          found = 0
+      else:
+        print "** WARNING ** Missing {} data for column {} iteration {} (key: {})"\
+          .format(SNAPS.ACT_COL, columnIndex, iteration, possibleKey)
+      out.append(found)
+    return out
+
+
+  def getStateByIteration(self, spid, stateType, iteration, numColumns):
     out = []
     # Before making a DB call for every column, let's ensure that there are
     # values stored for this type of snapshot.
@@ -105,18 +130,20 @@ class SpRedisClient(object):
     return out
 
 
-  def getPerIterationState(self, spid, stateType, columnIndex, iterations):
+  def getStatebyColumn(self, spid, stateType, columnIndex, maxIteration):
     out = []
     searchString = self.COLUMN_VALS.format(spid, "*", columnIndex, stateType)
-    keys = sorted(self._redis.keys(searchString))
-    from pprint import pprint; pprint(keys)
-    for iteration in xrange(0, iterations):
+    keys = self._redis.keys(searchString)
+    for iteration in xrange(0, maxIteration):
       possibleKey = self.COLUMN_VALS.format(
         spid, iteration, columnIndex, stateType
       )
       found = None
       if possibleKey in keys:
         found = self._getSnapshot(stateType, possibleKey)
+      else:
+        print "** WARNING ** Missing {} data for column {} iteration {} (key: {})"\
+          .format(stateType, columnIndex, iteration, possibleKey)
       out.append(found)
     return out
 

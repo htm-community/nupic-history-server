@@ -148,7 +148,7 @@ class History:
   def GET(self, spId, columnIndex):
     sp = spFacades[spId]
     history = sp.getState(
-      SNAPS.PERMS, columnIndex=int(columnIndex)
+      SNAPS.PERMS, SNAPS.ACT_COL, columnIndex=int(columnIndex)
     )
     return json.dumps(history)
 
