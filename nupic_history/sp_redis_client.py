@@ -91,19 +91,14 @@ class SpRedisClient(object):
 
 
   def getActiveColumnsByColumn(self, spid, columnIndex, maxIteration):
-    print columnIndex
-    print type(columnIndex)
     out = []
     searchKey = self.GLOBAL_VALS.format(spid, "*", SNAPS.ACT_COL)
-    print "searching for {}".format(searchKey)
     keys = self._redis.keys(searchKey)
     for iteration in xrange(0, maxIteration):
       possibleKey = self.GLOBAL_VALS.format(spid, iteration, SNAPS.ACT_COL)
-      print possibleKey
       found = None
       if possibleKey in keys:
         activeColumns = self._getSnapshot(SNAPS.ACT_COL, possibleKey)
-        print activeColumns
         if columnIndex in activeColumns["indices"]:
           found = 1
         else:
