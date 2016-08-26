@@ -75,7 +75,7 @@ class SPInterface:
         # Remove potential duplicates from both
         returnSnapshots = list(set(returnSnapshots))
         saveSnapshots = list(set(saveSnapshots))
-
+    # from pprint import pprint; pprint(params);
     sp = SP(**params)
     spFacade = spHistory.create(sp, save=saveSnapshots)
     spId = spFacade.getId()

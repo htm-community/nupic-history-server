@@ -152,6 +152,7 @@ class SpFacade(object):
       SpSnapshots.OVERLAPS = "overlaps"
       SpSnapshots.ACT_DC = "activeDutyCycles"
       SpSnapshots.OVP_DC = "overlapDutyCycles"
+      SpSnapshots.INH_MASKS = "inhibitionMasks"
 
     :param args:
     :param kwargs:
@@ -351,14 +352,7 @@ class SpFacade(object):
         sp.getPermanence(colIndex, perms)
         out.append([round(perm, 2) for perm in perms.tolist()])
     else:
-      if columnIndex is None:
-        out = self._redisClient.getStateByIteration(
-          self.getId(), SNAPS.PERMS, iteration, numColumns
-        )
-      else:
-        out = self._redisClient.getStatebyColumn(
-          self.getId(), SNAPS.PERMS, columnIndex, self.getIteration() + 1
-        )
+      out = self._getStateFor(SNAPS.PERMS, columnIndex, iteration, numColumns, out)
     return out
 
 
@@ -384,3 +378,36 @@ class SpFacade(object):
       return self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.OVP_DC, iteration
       )
+
+
+  def _conjureInhibitionMasks(self, iteration=None, columnIndex=None):
+    out = []
+    numColumns = self.getNumColumns()
+    if self._retrieveFromSp(iteration, columnIndex):
+      for colIndex in range(0, numColumns):
+        out.append(self._getInhibitionMask(colIndex))
+    else:
+      out = self._getStateFor(SNAPS.INH_MASKS, columnIndex, iteration, numColumns, out)
+    return out
+
+
+  def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
+    if columnIndex is None:
+      out = self._redisClient.getStateByIteration(
+        self.getId(), snap, iteration, numColumns
+      )
+    else:
+      out = self._redisClient.getStatebyColumn(
+        self.getId(), snap, columnIndex, self.getIteration() + 1
+      )
+    return out
+
+
+  def _getInhibitionMask(self, colIndex):
+    sp = self._sp
+    maskNeighbors = sp._getNeighborsND(
+      colIndex, sp._columnDimensions,
+      sp._inhibitionRadius
+    )
+    return maskNeighbors
+
