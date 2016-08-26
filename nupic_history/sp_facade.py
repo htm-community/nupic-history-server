@@ -279,7 +279,7 @@ class SpFacade(object):
       out = compressSdr(self._activeColumns)
     else:
       if columnIndex is None:
-        out = self._redisClient.getLayerState(
+        out = self._redisClient.getLayerStateByIteration(
           self.getId(), SNAPS.ACT_COL, iteration
         )
       else:
