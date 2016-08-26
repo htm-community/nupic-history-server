@@ -14,6 +14,7 @@ class SpRedisClient(object):
   SP_LIST = "sp_list"
   SP_PARAMS = "{}_params"             # spid
   SP_POT_POOLS = "{}_potentialPools"  # spid
+  SP_INH_MASKS = "{}_inhibitionMasks" # spid
   GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
   COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index,
                                       #   storage type
@@ -34,6 +35,7 @@ class SpRedisClient(object):
     bytesSaved += self._saveSpLayerValues(state, spid, iteration)
     bytesSaved += self._saveSpColumnPermanences(state, spid, iteration)
     bytesSaved += self._saveSpPotentialPools(state, spid)
+    bytesSaved += self._saveSpColumnInhibitionMasks(state, spid)
 
     end = time.time() * 1000
     print "SP {} iteration {} state serialization of {} bytes took {} ms".format(
@@ -201,6 +203,20 @@ class SpRedisClient(object):
       if len(self._redis.keys(key)) == 0:
         payload = dict()
         payload[SNAPS.POT_POOLS] = state[SNAPS.POT_POOLS]
+        bytesSaved += self._saveObject(key, payload)
+    return bytesSaved
+
+
+
+  def _saveSpColumnInhibitionMasks(self, state, spid):
+    # Inhibition masks span columns, but they don't change over time. So we
+    # check to see if we've saved it before.
+    bytesSaved = 0
+    if SNAPS.INH_MASKS in state.keys():
+      key = self.SP_INH_MASKS.format(spid)
+      if len(self._redis.keys(key)) == 0:
+        payload = dict()
+        payload[SNAPS.INH_MASKS] = state[SNAPS.INH_MASKS]
         bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 

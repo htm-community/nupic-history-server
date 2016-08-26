@@ -15,6 +15,7 @@ class SpSnapshots(object):
   OVERLAPS = "overlaps"
   ACT_DC = "activeDutyCycles"
   OVP_DC = "overlapDutyCycles"
+  INH_MASKS = "inhibitionMasks"
 
 
   @classmethod
