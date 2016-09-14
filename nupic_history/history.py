@@ -1,5 +1,5 @@
 from nupic_history.sp_facade import SpFacade
-from nupic_history.sp_redis_client import SpRedisClient
+from nupic_history.redis_client import RedisClient
 
 
 class NupicHistory(object):
@@ -10,7 +10,7 @@ class NupicHistory(object):
     Provides top-level control over the SP History Facades.
     """
     # TODO: Provide way for user to specific Redis connection details.
-    self._redisClient = SpRedisClient()
+    self._redisClient = RedisClient()
 
 
   def list(self):

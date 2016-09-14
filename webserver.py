@@ -6,7 +6,7 @@ import web
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from nupic_history import SpRedisClient, NupicHistory, Snapshots as SNAPS
+from nupic_history import NupicHistory, Snapshots as SNAPS
 
 global spFacades
 spFacades = {}
@@ -153,5 +153,4 @@ class History:
     return json.dumps(history)
 
 if __name__ == "__main__":
-  SpRedisClient().nuke()
   app.run()

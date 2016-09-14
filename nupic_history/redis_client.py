@@ -8,7 +8,7 @@ from nupic_history import Snapshots as SNAPS
 
 
 
-class SpRedisClient(object):
+class RedisClient(object):
 
   # Redis keys.
   SP_LIST = "sp_list"
