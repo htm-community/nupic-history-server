@@ -48,20 +48,20 @@ sp = nupic.research.spatial_pooler.SpatialPooler(
   wrapAround=True
 )
 
-# Create the top-level SpHistory object.
-spHistory = SpHistory()
+# Create the top-level NupicHistory object.
+spHistory = NupicHistory()
 
 # Decide what data you want to snapshot. Each one is optional.
 snapshots = [
-  SpSnapshots.INPUT,        # input encoding
-  SpSnapshots.ACT_COL,      # active columns
-  SpSnapshots.PERMS,        # permanences for each column to the input space
-  SpSnapshots.CON_SYN,      # connected synapses for each column
+  Snapshots.INPUT,        # input encoding
+  Snapshots.ACT_COL,      # active columns
+  Snapshots.PERMS,        # permanences for each column to the input space
+  Snapshots.CON_SYN,      # connected synapses for each column
                             #   (computed from permanences, not actually saved)
-  SpSnapshots.OVERLAPS,     # overlaps for each column
-  SpSnapshots.ACT_DC,       # active duty cycles
-  SpSnapshots.OVP_DC,       # overlap duty cycles
-  SpSnapshots.POT_POOLS,    # potential pools for each column
+  Snapshots.OVERLAPS,     # overlaps for each column
+  Snapshots.ACT_DC,       # active duty cycles
+  Snapshots.OVP_DC,       # overlap duty cycles
+  Snapshots.POT_POOLS,    # potential pools for each column
 ]
 
 # Create a facade around the SP that saves history as it runs.
@@ -91,18 +91,18 @@ lastIteration = sp.getIteration()
 # We can playback the life of the SP.
 for i in range(0, lastIteration + 1):
   print "\niteration {}".format(i)
-  # We're just printing the keys here, because some of these objects are very 
+  # We're just printing the keys here, because some of these objects are very
   # large.
-  input             = sp.getState(SpSnapshots.INPUT, iteration=i)
-  activeColumns     = sp.getState(SpSnapshots.ACT_COL, iteration=i)
-  potentialPools    = sp.getState(SpSnapshots.POT_POOLS, iteration=i)
-  overlaps          = sp.getState(SpSnapshots.OVERLAPS, iteration=i)
-  permanences       = sp.getState(SpSnapshots.PERMS, iteration=i)
-  activeDutyCycles  = sp.getState(SpSnapshots.ACT_DC, iteration=i)
-  overlapDutyCycles = sp.getState(SpSnapshots.OVP_DC, iteration=i)
-  connectedSynapses = sp.getState(SpSnapshots.CON_SYN, iteration=i)
+  input             = sp.getState(Snapshots.INPUT, iteration=i)
+  activeColumns     = sp.getState(Snapshots.ACT_COL, iteration=i)
+  potentialPools    = sp.getState(Snapshots.POT_POOLS, iteration=i)
+  overlaps          = sp.getState(Snapshots.OVERLAPS, iteration=i)
+  permanences       = sp.getState(Snapshots.PERMS, iteration=i)
+  activeDutyCycles  = sp.getState(Snapshots.ACT_DC, iteration=i)
+  overlapDutyCycles = sp.getState(Snapshots.OVP_DC, iteration=i)
+  connectedSynapses = sp.getState(Snapshots.CON_SYN, iteration=i)
 
-# We can also get the history of only one column 
+# We can also get the history of only one column
 # (for permanences, connected synapses)
-column42PermHistory = sp.getState(SpSnapshots.PERMS, column=42)
+column42PermHistory = sp.getState(Snapshots.PERMS, column=42)
 ```

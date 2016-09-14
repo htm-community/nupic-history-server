@@ -6,11 +6,11 @@ import web
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
 
-from nupic_history import SpRedisClient, SpHistory, SpSnapshots as SNAPS
+from nupic_history import SpRedisClient, NupicHistory, Snapshots as SNAPS
 
 global spFacades
 spFacades = {}
-spHistory = SpHistory()
+spHistory = NupicHistory()
 
 urls = (
   "/", "Index",

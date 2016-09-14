@@ -3,7 +3,7 @@ import multiprocessing
 
 import numpy as np
 
-from nupic_history import SpSnapshots as SNAPS
+from nupic_history import Snapshots as SNAPS
 from nupic_history.utils import compressSdr
 
 
@@ -16,7 +16,7 @@ class SpFacade(object):
 
     :param sp: Either an instance of Spatial Pooler or a SP id string
     :param redisClient: Instantiated Redis client
-    :param save: list of SpSnapshots to save with each compute step
+    :param save: list of Snapshots to save with each compute step
     """
     self._redisClient = redisClient
     if isinstance(sp, basestring):
@@ -138,21 +138,21 @@ class SpFacade(object):
 
     For example, to get the column overlaps at iteration 10:
 
-      sp.getState(SpSnapshots.OVERLAPS, iteration=10)
+      sp.getState(Snapshots.OVERLAPS, iteration=10)
 
     Will return an array of column overlaps (each being an array).
 
     The following snapshots can be retrieved:
 
-      SpSnapshots.INPUT = "input"
-      SpSnapshots.POT_POOLS = "potentialPools"
-      SpSnapshots.CON_SYN = "connectedSynapses"
-      SpSnapshots.PERMS = "permanences"
-      SpSnapshots.ACT_COL = "activeColumns"
-      SpSnapshots.OVERLAPS = "overlaps"
-      SpSnapshots.ACT_DC = "activeDutyCycles"
-      SpSnapshots.OVP_DC = "overlapDutyCycles"
-      SpSnapshots.INH_MASKS = "inhibitionMasks"
+      Snapshots.INPUT = "input"
+      Snapshots.POT_POOLS = "potentialPools"
+      Snapshots.CON_SYN = "connectedSynapses"
+      Snapshots.PERMS = "permanences"
+      Snapshots.ACT_COL = "activeColumns"
+      Snapshots.OVERLAPS = "overlaps"
+      Snapshots.ACT_DC = "activeDutyCycles"
+      Snapshots.OVP_DC = "overlapDutyCycles"
+      Snapshots.INH_MASKS = "inhibitionMasks"
 
     :param args:
     :param kwargs:

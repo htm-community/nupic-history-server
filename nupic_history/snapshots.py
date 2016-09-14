@@ -1,7 +1,7 @@
 import inspect
 
 
-class SpSnapshots(object):
+class Snapshots(object):
   """
   This is kindof an Enum. Used to enumerate the different data snapshots the
   SpFacades make available.

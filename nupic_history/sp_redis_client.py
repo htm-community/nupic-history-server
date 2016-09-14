@@ -4,7 +4,7 @@ import msgpack
 
 import redis
 
-from nupic_history import SpSnapshots as SNAPS
+from nupic_history import Snapshots as SNAPS
 
 
 

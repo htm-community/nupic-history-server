@@ -2,7 +2,7 @@ from nupic_history.sp_facade import SpFacade
 from nupic_history.sp_redis_client import SpRedisClient
 
 
-class SpHistory(object):
+class NupicHistory(object):
 
 
   def __init__(self):
@@ -29,7 +29,7 @@ class SpHistory(object):
     Creates a new active SP Facade for the given SP. Does not actually save
     anything yet.
     :param sp: SpatialPooler instance
-    :param save: list of SpSnapshots to save with each compute step
+    :param save: list of Snapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
     return SpFacade(sp, self._redisClient, save=save)
