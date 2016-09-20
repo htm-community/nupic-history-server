@@ -5,22 +5,28 @@ import numpy as np
 import web
 
 from nupic.research.spatial_pooler import SpatialPooler as SP
+from nupic.research.temporal_memory import TemporalMemory as TM
 
-from nupic_history import NupicHistory, Snapshots as SNAPS
+from nupic_history import NupicHistory
+from nupic_history import SpSnapshots as SP_SNAPS
+from nupic_history import TmSnapshots as TM_SNAPS
 
 global spFacades
 spFacades = {}
-spHistory = NupicHistory()
+tmFacades = {}
+nupicHistory = NupicHistory()
 
 urls = (
   "/", "Index",
-  "/client/(.+)", "Client",
-  "/_sp/", "SPInterface",
-  "/_sp/(.+)/history/(.+)", "History",
+  # "/client/(.+)", "Client",
+  "/_sp/", "SpInterface",
+  "/_sp/(.+)/history/(.+)", "SpHistory",
+  "/_sp/", "TmInterface",
+  "/_sp/(.+)/history/(.+)", "TmHistory",
 )
 web.config.debug = False
 app = web.application(urls, globals())
-render = web.template.render("tmpl/")
+# render = web.template.render("tmpl/")
 
 
 def templateNameToTitle(name):
@@ -39,21 +45,21 @@ class Index:
     return "NuPIC History Server"
 
 
-class Client:
+# class Client:
+#
+#
+#   def GET(self, file):
+#     name = file.split(".")[0]
+#     path = "html/{}".format(file)
+#     with open(path, "r") as htmlFile:
+#       return render.layout(
+#         name,
+#         templateNameToTitle(name),
+#         htmlFile.read()
+#       )
 
 
-  def GET(self, file):
-    name = file.split(".")[0]
-    path = "html/{}".format(file)
-    with open(path, "r") as htmlFile:
-      return render.layout(
-        name,
-        templateNameToTitle(name),
-        htmlFile.read()
-      )
-
-
-class SPInterface:
+class SpInterface:
 
 
   def POST(self):
@@ -63,8 +69,8 @@ class SPInterface:
     # We will always return the initial state of columns and overlaps because
     # they are cheap.
     returnSnapshots = [
-      SNAPS.ACT_COL,
-      SNAPS.OVERLAPS
+      SP_SNAPS.ACT_COL,
+      SP_SNAPS.OVERLAPS
     ]
     saveSnapshots = []
     if __name__ == '__main__':
@@ -77,15 +83,15 @@ class SPInterface:
         saveSnapshots = list(set(saveSnapshots))
     # from pprint import pprint; pprint(params);
     sp = SP(**params)
-    spFacade = spHistory.createSpFacade(sp, save=saveSnapshots)
-    spId = spFacade.getId()
-    spFacades[spId] = spFacade
+    spFacade = nupicHistory.createSpFacade(sp, save=saveSnapshots)
+    modelId = spFacade.getId()
+    spFacades[modelId] = spFacade
 
-    print "Created SP {} | Saving: {}".format(spId, saveSnapshots)
+    print "Created SP {} | Saving: {}".format(modelId, saveSnapshots)
 
     payload = {
       "meta": {
-        "id": spId,
+        "id": modelId,
         "saving": returnSnapshots
       }
     }
@@ -102,25 +108,25 @@ class SPInterface:
     requestInput = web.input()
     encoding = web.data()
     stateSnapshots = [
-      SNAPS.ACT_COL,
+      SP_SNAPS.ACT_COL,
     ]
 
-    for snap in SNAPS.listValues():
+    for snap in SP_SNAPS.listValues():
       getString = "get{}{}".format(snap[:1].upper(), snap[1:])
       if getString in requestInput and requestInput[getString] == "true":
         stateSnapshots.append(snap)
 
     if "id" not in requestInput:
-      print "Request must include a spatial pooler id."
+      print "Request must include a model id."
       return web.badrequest()
 
-    spid = requestInput["id"]
+    modelId = requestInput["id"]
 
-    if spid not in spFacades.keys():
-      print "Unknown SP id {}!".format(spid)
+    if modelId not in spFacades.keys():
+      print "Unknown SP id {}!".format(modelId)
       return web.badrequest()
 
-    sp = spFacades[spid]
+    sp = spFacades[modelId]
 
     learn = True
     if "learn" in requestInput:
@@ -128,7 +134,7 @@ class SPInterface:
 
     inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
-    print "Entering SP {} compute cycle | Learning: {}".format(spid, learn)
+    print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
     sp.compute(inputArray, learn=learn)
 
     response = sp.getState(*stateSnapshots)
@@ -143,14 +149,110 @@ class SPInterface:
 
 
 
-class History:
+class SpHistory:
 
-  def GET(self, spId, columnIndex):
-    sp = spFacades[spId]
+  def GET(self, modelId, columnIndex):
+    """
+    Returns entire history of SP for given column
+    """
+    sp = spFacades[modelId]
     history = sp.getState(
-      SNAPS.PERMS, SNAPS.ACT_COL, columnIndex=int(columnIndex)
+      SP_SNAPS.PERMS, SP_SNAPS.ACT_COL, columnIndex=int(columnIndex)
     )
     return json.dumps(history)
+
+if __name__ == "__main__":
+  app.run()
+
+
+
+class TmInterface:
+
+
+  def POST(self):
+    global tmFacades
+    params = json.loads(web.data())
+    requestInput = web.input()
+    # We will always return the active cells because they are cheap.
+    returnSnapshots = [TM_SNAPS.ACT_CELLS]
+    saveSnapshots = []
+    if __name__ == '__main__':
+      if "save" in requestInput and len(requestInput["save"]) > 0:
+        saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
+        # Be sure to also return any snapshots that were specified to be saved.
+        returnSnapshots += saveSnapshots
+        # Remove potential duplicates from both
+        returnSnapshots = list(set(returnSnapshots))
+        saveSnapshots = list(set(saveSnapshots))
+    from pprint import pprint; pprint(params);
+    tm = TM(**params)
+    tmFacade = nupicHistory.createTmFacade(
+      tm, save=saveSnapshots, modelId=requestInput["id"]
+    )
+    modelId = tmFacade.getId()
+    tmFacades[modelId] = tmFacade
+
+    print "Created TM {} | Saving: {}".format(modelId, saveSnapshots)
+
+    payload = {
+      "meta": {
+        "id": modelId,
+        "saving": returnSnapshots
+      }
+    }
+    tmState = tmFacade.getState(*returnSnapshots)
+    for key in tmState:
+      payload[key] = tmState[key]
+
+    web.header("Content-Type", "application/json")
+    return json.dumps(payload)
+
+
+  def PUT(self):
+    requestStart = time.time()
+    requestInput = web.input()
+    encoding = web.data()
+    stateSnapshots = [
+      TM_SNAPS.ACT_CELLS,
+    ]
+
+    for snap in TM_SNAPS.listValues():
+      getString = "get{}{}".format(snap[:1].upper(), snap[1:])
+      if getString in requestInput and requestInput[getString] == "true":
+        stateSnapshots.append(snap)
+
+    if "id" not in requestInput:
+      print "Request must include a model id."
+      return web.badrequest()
+
+    modelId = requestInput["id"]
+
+    if modelId not in tmFacades.keys():
+      print "Unknown model id {}!".format(modelId)
+      return web.badrequest()
+
+    tm = tmFacades[modelId]
+
+    learn = True
+    if "learn" in requestInput:
+      learn = requestInput["learn"] == "true"
+
+    inputArray = np.array([int(bit) for bit in encoding.split(",")])
+
+    print "Entering TM {} compute cycle | Learning: {}".format(modelId, learn)
+    tm.compute(inputArray, learn=learn)
+
+    response = tm.getState(*stateSnapshots)
+
+    web.header("Content-Type", "application/json")
+    jsonOut = json.dumps(response)
+
+    requestEnd = time.time()
+    print("\tTM compute cycle took %g seconds" % (requestEnd - requestStart))
+
+    return jsonOut
+
+
 
 if __name__ == "__main__":
   app.run()

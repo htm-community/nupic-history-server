@@ -5,6 +5,7 @@ import msgpack
 import redis
 
 from nupic_history import SpSnapshots as SP_SNAPS
+from nupic_history import TmSnapshots as TM_SNAPS
 
 
 
@@ -44,19 +45,19 @@ class RedisClient(object):
     )
 
 
-  def saveTmState(self, tmid, tmParams, iteration, state):
+  def saveTmState(self, modelId, tmParams, iteration, state):
     start = time.time() * 1000
 
-    self._updateTmRegistry(tmid, tmParams)
+    self._updateTmRegistry(modelId, tmParams)
     bytesSaved = 0
-    bytesSaved += self._saveSpLayerValues(state, tmid, iteration)
-    bytesSaved += self._saveSpColumnPermanences(state, tmid, iteration)
-    bytesSaved += self._saveSpPotentialPools(state, tmid)
-    bytesSaved += self._saveSpColumnInhibitionMasks(state, tmid)
+    bytesSaved += self._saveTmLayerValues(state, modelId, iteration)
+    # bytesSaved += self._saveSpColumnPermanences(state, modelId, iteration)
+    # bytesSaved += self._saveSpPotentialPools(state, modelId)
+    # bytesSaved += self._saveSpColumnInhibitionMasks(state, modelId)
 
     end = time.time() * 1000
     print "TM {} iteration {} state serialization of {} bytes took {} ms".format(
-      tmid, iteration, bytesSaved, (end - start)
+      modelId, iteration, bytesSaved, (end - start)
     )
 
 
@@ -183,16 +184,23 @@ class RedisClient(object):
     # Active columns and inputs are small, and can be saved in one key for
     # each time step.
     bytesSaved = 0
-    # These are always SDRS, so they can be compressed.
-    # (Caveat: sometimes the input array is not sparse, but whatevs.)
-    for outType in [SP_SNAPS.ACT_COL, SP_SNAPS.INPUT]:
+    stateKeys = [
+      SP_SNAPS.ACT_COL, SP_SNAPS.INPUT, SP_SNAPS.ACT_DC,
+      SP_SNAPS.OVP_DC, SP_SNAPS.OVERLAPS
+    ]
+    for outType in stateKeys:
       if outType in state.keys():
         key = self.GLOBAL_VALS.format(modelId, iteration, outType)
         payload = dict()
         payload[outType] = state[outType]
         bytesSaved += self._saveObject(key, payload)
-    # Overlaps and duty cycles cannot be compressed.
-    for outType in [SP_SNAPS.ACT_DC, SP_SNAPS.OVP_DC, SP_SNAPS.OVERLAPS]:
+    return bytesSaved
+
+
+  def _saveTmLayerValues(self, state, modelId, iteration):
+    # Active cells are small, and can be saved in one key for each time step.
+    bytesSaved = 0
+    for outType in [TM_SNAPS.ACT_CELLS]:
       if outType in state.keys():
         key = self.GLOBAL_VALS.format(modelId, iteration, outType)
         payload = dict()

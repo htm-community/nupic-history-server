@@ -9,7 +9,7 @@ from nupic_history.utils import compressSdr
 
 class SpFacade(object):
 
-  def __init__(self, sp, redisClient, save=None):
+  def __init__(self, sp, redisClient, save=None, modelId=None):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
@@ -25,7 +25,10 @@ class SpFacade(object):
       self._iteration = self._redisClient.getMaxIteration(self._id)
     else:
       self._sp = sp
-      self._id = str(uuid.uuid4()).split('-')[0]
+      if modelId is None:
+        self._id = str(uuid.uuid4()).split('-')[0]
+      else:
+        self._id = modelId
       self._iteration = -1
     self._state = None
     self._input = None

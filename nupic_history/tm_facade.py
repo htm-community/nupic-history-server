@@ -7,7 +7,7 @@ from nupic_history import TmSnapshots as SNAPS
 
 class TmFacade(object):
 
-  def __init__(self, tm, redisClient, save=None):
+  def __init__(self, tm, redisClient, save=None, modelId=None):
     self._redisClient = redisClient
     if isinstance(tm, basestring):
       self._tm = None
@@ -15,7 +15,10 @@ class TmFacade(object):
       self._iteration = self._redisClient.getMaxIteration(self._id)
     else:
       self._tm = tm
-      self._id = str(uuid.uuid4()).split('-')[0]
+      if modelId is None:
+        self._id = str(uuid.uuid4()).split('-')[0]
+      else:
+        self._id = modelId
       self._iteration = -1
     self._state = None
     self._input = None
@@ -92,11 +95,12 @@ class TmFacade(object):
       if self.getInput() is None:
         raise ValueError(
           "Cannot save TM state because it has never seen input.")
-      tmid = self.getId()
+      modelId = self.getId()
       params = self.getParams()
       iteration = self.getIteration()
       state = self.getState(*self._save)
-      self._redisClient.saveTmState(tmid, params, iteration, state)
+      print "Saving state of TM..."
+      self._redisClient.saveTmState(modelId, params, iteration, state)
 
 
   def _advance(self):
@@ -104,11 +108,9 @@ class TmFacade(object):
     self._iteration += 1
 
 
-  def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
+  def _retrieveFromAlgorithm(self, iteration):
     return self.isActive() \
-           and (
-             (iteration is None and columnIndex is None)
-             or iteration == self.getIteration())
+           and (iteration is None or iteration == self.getIteration())
 
 
   def getParams(self):
@@ -138,18 +140,15 @@ class TmFacade(object):
 
 
   def getState(self, *args, **kwargs):
-    tm = self._tm
-    print("active cells " + str(tm.getActiveCells()))
-    print("predictive cells " + str(tm.getPredictiveCells()))
-    print("winner cells " + str(tm.getWinnerCells()))
-    print("# of active segments " + str(tm.connections.numSegments()))
+    # tm = self._tm
+    # print("active cells " + str(tm.getActiveCells()))
+    # print("predictive cells " + str(tm.getPredictiveCells()))
+    # print("winner cells " + str(tm.getWinnerCells()))
+    # print("# of active segments " + str(tm.connections.numSegments()))
 
     iteration = None
     if "iteration" in kwargs:
       iteration = kwargs["iteration"]
-    columnIndex = None
-    if "columnIndex" in kwargs:
-      columnIndex = kwargs["columnIndex"]
 
     if self._state is None:
       self._state = {}
@@ -158,19 +157,21 @@ class TmFacade(object):
       if not SNAPS.contains(snap):
         raise ValueError("{} is not available in TM History.".format(snap))
       out[snap] = self._getSnapshot(
-        snap, iteration=iteration, columnIndex=columnIndex
+        snap, iteration=iteration
       )
     return out
 
 
-  def _getSnapshot(self, name, iteration=None, columnIndex=None):
+  def _getSnapshot(self, name, iteration=None):
     # Use the cache if we can.
     if name in self._state and iteration == self._iteration:
+      print "** Using Cache"
       return self._state[name]
     else:
       funcName = "_conjure{}".format(name[:1].upper() + name[1:])
       func = getattr(self, funcName)
-      result = func(iteration=iteration, columnIndex=columnIndex)
+      print "** Calling {}".format(funcName)
+      result = func(iteration=iteration)
       self._state[name] = result
       return result
 
@@ -184,17 +185,13 @@ class TmFacade(object):
   # iteration in the past is specified, Redis will be the data source.
 
 
-  def _conjureActiveCells(self, iteration=None, columnIndex=None):
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
+  def _conjureActiveCells(self, iteration=None):
+    if self._retrieveFromAlgorithm(iteration):
+      print "** getting active cells from TM instance"
       out = self._tm.getActiveCells()
     else:
-      out = None
-      # if columnIndex is None:
-      #   out = self._redisClient.getLayerStateByIteration(
-      #     self.getId(), SNAPS.ACT_CELLS, iteration
-      #   )
-      # else:
-      #   out = self._redisClient.getActiveColumnsByColumn(
-      #     self.getId(), columnIndex, self.getIteration() + 1
-      #   )
+      print "** getting active cells from Redis"
+      out = self._redisClient.getLayerStateByIteration(
+        self.getId(), SNAPS.ACT_CELLS, iteration
+      )
     return out

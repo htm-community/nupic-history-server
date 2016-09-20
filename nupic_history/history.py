@@ -25,15 +25,16 @@ class NupicHistory(object):
     ]
 
 
-  def createSpFacade(self, sp, save=None):
+  def createSpFacade(self, sp, save=None, modelId=None):
     """
     Creates a new active SP Facade for the given SP. Does not actually save
     anything yet.
+    :param modelId: (string) pre-defined model id
     :param sp: SpatialPooler instance
     :param save: list of Snapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
-    return SpFacade(sp, self._redisClient, save=save)
+    return SpFacade(sp, self._redisClient, save=save, modelId=modelId)
 
 
   def getSpFacade(self, spId):
@@ -46,15 +47,16 @@ class NupicHistory(object):
     return SpFacade(spId, self._redisClient)
 
 
-  def createTmFacade(self, tm, save=None):
+  def createTmFacade(self, tm, save=None, modelId=None):
     """
     Creates a new active TM Facade for the given TM. Does not actually save
     anything yet.
+    :param modelId: (string) pre-defined model id
     :param tm: TemporalMemory instance
     :param save: list of Snapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
-    return TmFacade(tm, self._redisClient, save=save)
+    return TmFacade(tm, self._redisClient, save=save, modelId=modelId)
 
 
   def getTmFacade(self, tmId):
