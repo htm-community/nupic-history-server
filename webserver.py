@@ -77,7 +77,7 @@ class SPInterface:
         saveSnapshots = list(set(saveSnapshots))
     # from pprint import pprint; pprint(params);
     sp = SP(**params)
-    spFacade = spHistory.create(sp, save=saveSnapshots)
+    spFacade = spHistory.createSpFacade(sp, save=saveSnapshots)
     spId = spFacade.getId()
     spFacades[spId] = spFacade
 

@@ -7,17 +7,6 @@ class Snapshots(object):
   SpFacades make available.
   """
 
-  INPUT = "input"
-  POT_POOLS = "potentialPools"
-  CON_SYN = "connectedSynapses"
-  PERMS = "permanences"
-  ACT_COL = "activeColumns"
-  OVERLAPS = "overlaps"
-  ACT_DC = "activeDutyCycles"
-  OVP_DC = "overlapDutyCycles"
-  INH_MASKS = "inhibitionMasks"
-
-
   @classmethod
   def listKeys(cls):
     return cls._listBy("key")
@@ -43,3 +32,23 @@ class Snapshots(object):
       a[index] for a in attributes
       if not (a[0].startswith('__') and a[0].endswith('__'))
     ]
+
+
+
+class SpSnapshots(Snapshots):
+
+  INPUT = "input"
+  POT_POOLS = "potentialPools"
+  CON_SYN = "connectedSynapses"
+  PERMS = "permanences"
+  ACT_COL = "activeColumns"
+  OVERLAPS = "overlaps"
+  ACT_DC = "activeDutyCycles"
+  OVP_DC = "overlapDutyCycles"
+  INH_MASKS = "inhibitionMasks"
+
+
+
+class TmSnapshots(Snapshots):
+
+  ACT_CELLS = "activeCells"

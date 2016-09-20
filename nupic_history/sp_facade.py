@@ -3,7 +3,7 @@ import multiprocessing
 
 import numpy as np
 
-from nupic_history import Snapshots as SNAPS
+from nupic_history import SpSnapshots as SNAPS
 from nupic_history.utils import compressSdr
 
 
@@ -86,7 +86,7 @@ class SpFacade(object):
     if sp is None:
       params =self._redisClient.getSpParams(self.getId())
     else:
-      params ={
+      params = {
         "numInputs": sp.getNumInputs(),
         "numColumns": sp.getNumColumns(),
         "columnDimensions": sp.getColumnDimensions().tolist(),
@@ -226,7 +226,7 @@ class SpFacade(object):
     self._iteration += 1
 
 
-  def _retrieveFromSp(self, iteration, columnIndex=None):
+  def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
     return self.isActive() \
            and (
              (iteration is None and columnIndex is None)
@@ -266,7 +266,7 @@ class SpFacade(object):
 
 
   def _conjureInput(self, iteration=None, **kwargs):
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromAlgorithm(iteration):
       return compressSdr(self._input)
     else:
       return self._redisClient.getLayerStateByIteration(
@@ -275,7 +275,7 @@ class SpFacade(object):
 
 
   def _conjureActiveColumns(self, iteration=None, columnIndex=None):
-    if self._retrieveFromSp(iteration, columnIndex):
+    if self._retrieveFromAlgorithm(iteration, columnIndex):
       out = compressSdr(self._activeColumns)
     else:
       if columnIndex is None:
@@ -290,7 +290,7 @@ class SpFacade(object):
 
 
   def _conjureOverlaps(self, iteration=None, **kwargs):
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromAlgorithm(iteration):
       return self._sp.getOverlaps().tolist()
     else:
       return self._redisClient.getLayerStateByIteration(
@@ -318,7 +318,7 @@ class SpFacade(object):
 
   def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
     columns = []
-    if self._retrieveFromSp(iteration, columnIndex):
+    if self._retrieveFromAlgorithm(iteration, columnIndex):
       sp = self._sp
       for colIndex in range(0, sp.getNumColumns()):
         connectedSynapses = self._getZeroedInput()
@@ -346,7 +346,7 @@ class SpFacade(object):
     out = []
     numColumns = self.getNumColumns()
     sp = self._sp
-    if self._retrieveFromSp(iteration, columnIndex):
+    if self._retrieveFromAlgorithm(iteration, columnIndex):
       for colIndex in range(0, numColumns):
         perms = self._getZeroedInput()
         sp.getPermanence(colIndex, perms)
@@ -357,7 +357,7 @@ class SpFacade(object):
 
 
   def _conjureActiveDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromAlgorithm(iteration):
       sp = self._sp
       dutyCycles = self._getZeroedColumns()
       sp.getActiveDutyCycles(dutyCycles)
@@ -369,7 +369,7 @@ class SpFacade(object):
 
 
   def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromSp(iteration):
+    if self._retrieveFromAlgorithm(iteration):
       sp = self._sp
       dutyCycles = self._getZeroedColumns()
       sp.getOverlapDutyCycles(dutyCycles)
@@ -383,7 +383,7 @@ class SpFacade(object):
   def _conjureInhibitionMasks(self, iteration=None, columnIndex=None):
     out = []
     numColumns = self.getNumColumns()
-    if self._retrieveFromSp(iteration, columnIndex):
+    if self._retrieveFromAlgorithm(iteration, columnIndex):
       for colIndex in range(0, numColumns):
         out.append(self._getInhibitionMask(colIndex))
     else:

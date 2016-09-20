@@ -4,33 +4,34 @@ import msgpack
 
 import redis
 
-from nupic_history import Snapshots as SNAPS
+from nupic_history import SpSnapshots as SP_SNAPS
 
 
 
 class RedisClient(object):
 
   # Redis keys.
-  SP_LIST = "sp_list"
-  SP_PARAMS = "{}_params"             # spid
+  MODEL_LIST = "model_list"
+  SP_PARAMS = "{}_sp_params"          # spid
+  TM_PARAMS = "{}_tm_params"          # tmid
   SP_POT_POOLS = "{}_potentialPools"  # spid
   SP_INH_MASKS = "{}_inhibitionMasks" # spid
   GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
   COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index,
-                                      #   storage type
+                                      # storage type
 
   def __init__(self, host="localhost", port=6379):
     self._redis = redis.Redis(host=host, port=port)
 
 
   def listSpIds(self):
-    return msgpack.loads(self._redis.get(self.SP_LIST))["sps"]
+    return msgpack.loads(self._redis.get(self.MODEL_LIST))["sps"]
 
 
   def saveSpState(self, spid, spParams, iteration, state):
     start = time.time() * 1000
 
-    self._updateRegistry(spid, spParams)
+    self._updateSpRegistry(spid, spParams)
     bytesSaved = 0
     bytesSaved += self._saveSpLayerValues(state, spid, iteration)
     bytesSaved += self._saveSpColumnPermanences(state, spid, iteration)
@@ -43,97 +44,118 @@ class RedisClient(object):
     )
 
 
+  def saveTmState(self, tmid, tmParams, iteration, state):
+    start = time.time() * 1000
+
+    self._updateTmRegistry(tmid, tmParams)
+    bytesSaved = 0
+    bytesSaved += self._saveSpLayerValues(state, tmid, iteration)
+    bytesSaved += self._saveSpColumnPermanences(state, tmid, iteration)
+    bytesSaved += self._saveSpPotentialPools(state, tmid)
+    bytesSaved += self._saveSpColumnInhibitionMasks(state, tmid)
+
+    end = time.time() * 1000
+    print "TM {} iteration {} state serialization of {} bytes took {} ms".format(
+      tmid, iteration, bytesSaved, (end - start)
+    )
+
+
   def nuke(self):
     # Nukes absolutely all data saved about SP instances.
     rds = self._redis
-    spList = rds.get(self.SP_LIST)
+    models = rds.get(self.MODEL_LIST)
     deleted = 0
-    if spList is not None:
-      spList = msgpack.loads(spList)["sps"]
-      for spid in spList:
-        deleted += self.delete(spid)
-      deleted += rds.delete(self.SP_LIST)
+    if models is not None:
+      models = msgpack.loads(models)["models"]
+      for modelId in models:
+        deleted += self.delete(modelId)
+      deleted += rds.delete(self.MODEL_LIST)
     print "Deleted {} Redis keys.".format(deleted)
 
 
-  def delete(self, spid):
+  def delete(self, modelId):
     rds = self._redis
     deleted = 0
-    print "deleting sp {}".format(spid)
-    doomed = rds.keys("{}*".format(spid))
+    print "deleting model {}".format(modelId)
+    doomed = rds.keys("{}*".format(modelId))
     for key in doomed:
       deleted += rds.delete(key)
     # Also remove the registry entry
-    spList = msgpack.loads(rds.get(self.SP_LIST))
-    sps = spList["sps"]
-    doomed = sps.index(spid)
-    del sps[doomed]
-    rds.set(self.SP_LIST, msgpack.dumps(spList))
+    modelList = msgpack.loads(rds.get(self.MODEL_LIST))
+    models = modelList["models"]
+    doomed = models.index(modelId)
+    del models[doomed]
+    rds.set(self.MODEL_LIST, msgpack.dumps(modelList))
     return deleted
 
 
-  def getSpParams(self, spid):
-    params = msgpack.loads(self._redis.get(self.SP_PARAMS.format(spid)))
+  def getSpParams(self, modelId):
+    params = msgpack.loads(self._redis.get(self.SP_PARAMS.format(modelId)))
     return params["params"]
 
 
-  def getMaxIteration(self, spid):
+  def getTmParams(self, modelId):
+    params = msgpack.loads(self._redis.get(self.TM_PARAMS.format(modelId)))
+    return params["params"]
+
+
+  def getMaxIteration(self, modelId):
     rds = self._redis
     maxIteration = 0
     # We will use active columns keys to find the max iteration.
-    keys = rds.keys("{}_?_activeColumns".format(spid))
+    keys = rds.keys("{}_?_activeColumns".format(modelId))
     if len(keys) > 0:
       maxIteration = max([int(key.split("_")[1]) for key in keys])
     return maxIteration
 
 
-  def getLayerStateByIteration(self, spid, stateType, iteration):
-    key = self.GLOBAL_VALS.format(spid, iteration, stateType)
+  def getLayerStateByIteration(self, modelId, stateType, iteration):
+    key = self.GLOBAL_VALS.format(modelId, iteration, stateType)
     return self._getSnapshot(stateType, key)
 
 
-  def getActiveColumnsByColumn(self, spid, columnIndex, maxIteration):
+  def getActiveColumnsByColumn(self, modelId, columnIndex, maxIteration):
     out = []
-    searchKey = self.GLOBAL_VALS.format(spid, "*", SNAPS.ACT_COL)
+    searchKey = self.GLOBAL_VALS.format(modelId, "*", SP_SNAPS.ACT_COL)
     keys = self._redis.keys(searchKey)
     for iteration in xrange(0, maxIteration):
-      possibleKey = self.GLOBAL_VALS.format(spid, iteration, SNAPS.ACT_COL)
+      possibleKey = self.GLOBAL_VALS.format(modelId, iteration, SP_SNAPS.ACT_COL)
       found = None
       if possibleKey in keys:
-        activeColumns = self._getSnapshot(SNAPS.ACT_COL, possibleKey)
+        activeColumns = self._getSnapshot(SP_SNAPS.ACT_COL, possibleKey)
         if columnIndex in activeColumns["indices"]:
           found = 1
         else:
           found = 0
       else:
         print "** WARNING ** Missing {} data for column {} iteration {} (key: {})"\
-          .format(SNAPS.ACT_COL, columnIndex, iteration, possibleKey)
+          .format(SP_SNAPS.ACT_COL, columnIndex, iteration, possibleKey)
       out.append(found)
     return out
 
 
-  def getStateByIteration(self, spid, stateType, iteration, numColumns):
+  def getStateByIteration(self, modelId, stateType, iteration, numColumns):
     out = []
     # Before making a DB call for every column, let's ensure that there are
     # values stored for this type of snapshot.
     numKeys = len(self._redis.keys(
-      self.COLUMN_VALS.format(spid, "*", "*", stateType)
+      self.COLUMN_VALS.format(modelId, "*", "*", stateType)
     ))
     if numKeys > 0:
       for columnIndex in xrange(0, numColumns):
-        key = self.COLUMN_VALS.format(spid, iteration, columnIndex, stateType)
+        key = self.COLUMN_VALS.format(modelId, iteration, columnIndex, stateType)
         column = self._getSnapshot(stateType, key)
         out.append(column)
     return out
 
 
-  def getStatebyColumn(self, spid, stateType, columnIndex, maxIteration):
+  def getStatebyColumn(self, modelId, stateType, columnIndex, maxIteration):
     out = []
-    searchString = self.COLUMN_VALS.format(spid, "*", columnIndex, stateType)
+    searchString = self.COLUMN_VALS.format(modelId, "*", columnIndex, stateType)
     keys = self._redis.keys(searchString)
     for iteration in xrange(0, maxIteration):
       possibleKey = self.COLUMN_VALS.format(
-        spid, iteration, columnIndex, stateType
+        modelId, iteration, columnIndex, stateType
       )
       found = None
       if possibleKey in keys:
@@ -145,8 +167,8 @@ class RedisClient(object):
     return out
 
 
-  def getPotentialPools(self, spid):
-    return self._getSnapshot(SNAPS.POT_POOLS, self.SP_POT_POOLS.format(spid))
+  def getPotentialPools(self, modelId):
+    return self._getSnapshot(SP_SNAPS.POT_POOLS, self.SP_POT_POOLS.format(modelId))
 
 
   def _getSnapshot(self, stateType, key):
@@ -157,91 +179,100 @@ class RedisClient(object):
     return out
 
 
-  def _saveSpLayerValues(self, state, spid, iteration):
+  def _saveSpLayerValues(self, state, modelId, iteration):
     # Active columns and inputs are small, and can be saved in one key for
     # each time step.
     bytesSaved = 0
     # These are always SDRS, so they can be compressed.
     # (Caveat: sometimes the input array is not sparse, but whatevs.)
-    for outType in [SNAPS.ACT_COL, SNAPS.INPUT]:
+    for outType in [SP_SNAPS.ACT_COL, SP_SNAPS.INPUT]:
       if outType in state.keys():
-        key = self.GLOBAL_VALS.format(spid, iteration, outType)
+        key = self.GLOBAL_VALS.format(modelId, iteration, outType)
         payload = dict()
         payload[outType] = state[outType]
         bytesSaved += self._saveObject(key, payload)
     # Overlaps and duty cycles cannot be compressed.
-    for outType in [SNAPS.ACT_DC, SNAPS.OVP_DC, SNAPS.OVERLAPS]:
+    for outType in [SP_SNAPS.ACT_DC, SP_SNAPS.OVP_DC, SP_SNAPS.OVERLAPS]:
       if outType in state.keys():
-        key = self.GLOBAL_VALS.format(spid, iteration, outType)
+        key = self.GLOBAL_VALS.format(modelId, iteration, outType)
         payload = dict()
         payload[outType] = state[outType]
         bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
-  def _saveSpColumnPermanences(self, state, spid, iteration):
+  def _saveSpColumnPermanences(self, state, modelId, iteration):
     # Permanences are big, so we save them in one key per column for easier
     # extraction by either column or iteration later.
     bytesSaved = 0
-    if SNAPS.PERMS in state.keys():
-      perms = state[SNAPS.PERMS]
+    if SP_SNAPS.PERMS in state.keys():
+      perms = state[SP_SNAPS.PERMS]
       for columnIndex, permanences in enumerate(perms):
-        key = self.COLUMN_VALS.format(spid, iteration, columnIndex, SNAPS.PERMS)
+        key = self.COLUMN_VALS.format(modelId, iteration, columnIndex, SP_SNAPS.PERMS)
         payload = dict()
-        payload[SNAPS.PERMS] = permanences
+        payload[SP_SNAPS.PERMS] = permanences
         bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
 
-  def _saveSpPotentialPools(self, state, spid):
+  def _saveSpPotentialPools(self, state, modelId):
     # Potental pool span columns, but they don't change over time. So we check
     # to see if we've saved it before.
     bytesSaved = 0
-    if SNAPS.POT_POOLS in state.keys():
-      key = self.SP_POT_POOLS.format(spid)
+    if SP_SNAPS.POT_POOLS in state.keys():
+      key = self.SP_POT_POOLS.format(modelId)
       if len(self._redis.keys(key)) == 0:
         payload = dict()
-        payload[SNAPS.POT_POOLS] = state[SNAPS.POT_POOLS]
+        payload[SP_SNAPS.POT_POOLS] = state[SP_SNAPS.POT_POOLS]
         bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
 
-  def _saveSpColumnInhibitionMasks(self, state, spid):
+  def _saveSpColumnInhibitionMasks(self, state, modelId):
     # Inhibition masks span columns, but they don't change over time. So we
     # check to see if we've saved it before.
     bytesSaved = 0
-    if SNAPS.INH_MASKS in state.keys():
-      key = self.SP_INH_MASKS.format(spid)
+    if SP_SNAPS.INH_MASKS in state.keys():
+      key = self.SP_INH_MASKS.format(modelId)
       if len(self._redis.keys(key)) == 0:
         payload = dict()
-        payload[SNAPS.INH_MASKS] = state[SNAPS.INH_MASKS]
+        payload[SP_SNAPS.INH_MASKS] = state[SP_SNAPS.INH_MASKS]
         bytesSaved += self._saveObject(key, payload)
     return bytesSaved
 
 
 
-  def _updateRegistry(self, spid, spParams):
-    # All saved Spatial Pooler information is keyed by an index and saved into
-    # a key defined by SP_LIST.
-    spList = self._redis.get(self.SP_LIST)
-    if spList is None:
-      spList = {"sps": [spid]}
+  def _updateRegistry(self, modelId):
+    models = self._redis.get(self.MODEL_LIST)
+    if models is None:
+      models = {"models": [modelId]}
     else:
-      spList = msgpack.loads(spList)
-      if spid not in spList["sps"]:
-        spList["sps"].append(spid)
-    self._saveObject(self.SP_LIST, spList)
-    params = {
+      models = msgpack.loads(models)
+      if modelId not in models["models"]:
+        models["models"].append(modelId)
+    self._saveObject(self.MODEL_LIST, models)
+
+
+
+  def _updateSpRegistry(self, modelId, spParams):
+    self._updateRegistry(modelId)
+    self._saveObject(self.SP_PARAMS.format(modelId), {
       "params": spParams
-    }
-    self._saveObject(self.SP_PARAMS.format(spid), params)
+    })
+
+
+
+  def _updateTmRegistry(self, modelId, tmParams):
+    self._updateRegistry(modelId)
+    self._saveObject(self.TM_PARAMS.format(modelId), {
+      "params": tmParams
+    })
 
 
 
   def _saveObject(self, key, obj):
-    # Using explicit separators keeps unnecessary whitespace out of Redis.
     msgpackString = msgpack.dumps(obj)
     size = sys.getsizeof(msgpackString)
     self._redis.set(key, msgpackString)
