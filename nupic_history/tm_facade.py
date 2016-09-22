@@ -1,9 +1,7 @@
 import uuid
 import multiprocessing
-import numpy as np
 
 from nupic_history import TmSnapshots as SNAPS
-
 
 class TmFacade(object):
 

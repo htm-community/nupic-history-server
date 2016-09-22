@@ -18,23 +18,13 @@ nupicHistory = NupicHistory()
 
 urls = (
   "/", "Index",
-  # "/client/(.+)", "Client",
   "/_sp/", "SpInterface",
   "/_sp/(.+)/history/(.+)", "SpHistory",
-  "/_sp/", "TmInterface",
-  "/_sp/(.+)/history/(.+)", "TmHistory",
+  "/_tm/", "TmInterface",
+  "/_tm/(.+)/history/(.+)", "TmHistory",
 )
 web.config.debug = False
 app = web.application(urls, globals())
-# render = web.template.render("tmpl/")
-
-
-def templateNameToTitle(name):
-  if name == "index": return ""
-  title = name
-  if "-" in title:
-    title = title.replace("-", " ")
-  return title.title()
 
 
 
@@ -43,20 +33,6 @@ class Index:
 
   def GET(self):
     return "NuPIC History Server"
-
-
-# class Client:
-#
-#
-#   def GET(self, file):
-#     name = file.split(".")[0]
-#     path = "html/{}".format(file)
-#     with open(path, "r") as htmlFile:
-#       return render.layout(
-#         name,
-#         templateNameToTitle(name),
-#         htmlFile.read()
-#       )
 
 
 class SpInterface:
@@ -161,9 +137,6 @@ class SpHistory:
     )
     return json.dumps(history)
 
-if __name__ == "__main__":
-  app.run()
-
 
 
 class TmInterface:
@@ -184,7 +157,7 @@ class TmInterface:
         # Remove potential duplicates from both
         returnSnapshots = list(set(returnSnapshots))
         saveSnapshots = list(set(saveSnapshots))
-    from pprint import pprint; pprint(params);
+    from pprint import pprint; pprint(params)
     tm = TM(**params)
     tmFacade = nupicHistory.createTmFacade(
       tm, save=saveSnapshots, modelId=requestInput["id"]
@@ -240,7 +213,7 @@ class TmInterface:
     inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
     print "Entering TM {} compute cycle | Learning: {}".format(modelId, learn)
-    tm.compute(inputArray, learn=learn)
+    tm.compute(inputArray.tolist(), learn=learn)
 
     response = tm.getState(*stateSnapshots)
 
