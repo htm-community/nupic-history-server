@@ -193,3 +193,15 @@ class TmFacade(object):
         self.getId(), SNAPS.ACT_CELLS, iteration
       )
     return out
+
+
+  def _conjurePredictiveCells(self, iteration=None):
+    if self._retrieveFromAlgorithm(iteration):
+      print "** getting active cells from TM instance"
+      out = self._tm.getPredictiveCells()
+    else:
+      print "** getting active cells from Redis"
+      out = self._redisClient.getLayerStateByIteration(
+        self.getId(), SNAPS.PRD_CELLS, iteration
+      )
+    return out

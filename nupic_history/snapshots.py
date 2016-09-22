@@ -52,3 +52,4 @@ class SpSnapshots(Snapshots):
 class TmSnapshots(Snapshots):
 
   ACT_CELLS = "activeCells"
+  PRD_CELLS = "predictiveCells"

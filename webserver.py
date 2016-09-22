@@ -187,6 +187,7 @@ class TmInterface:
     encoding = web.data()
     stateSnapshots = [
       TM_SNAPS.ACT_CELLS,
+      TM_SNAPS.PRD_CELLS,
     ]
 
     for snap in TM_SNAPS.listValues():
