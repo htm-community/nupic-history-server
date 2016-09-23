@@ -83,6 +83,13 @@ class TmFacade(object):
       self.save()
 
 
+  def reset(self):
+    """
+    Just a pass-through to the TM.reset() function.
+    """
+    self._tm.reset()
+
+
   def save(self):
     """
     Saves the current state of the SP to Redis.

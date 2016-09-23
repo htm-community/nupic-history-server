@@ -21,7 +21,6 @@ urls = (
   "/_sp/", "SpInterface",
   "/_sp/(.+)/history/(.+)", "SpHistory",
   "/_tm/", "TmInterface",
-  "/_tm/(.+)/history/(.+)", "TmHistory",
 )
 web.config.debug = False
 app = web.application(urls, globals())
@@ -210,6 +209,9 @@ class TmInterface:
     learn = True
     if "learn" in requestInput:
       learn = requestInput["learn"] == "true"
+    reset = False
+    if "reset" in requestInput:
+      reset = requestInput["reset"] == "true"
 
     inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
@@ -217,6 +219,10 @@ class TmInterface:
     tm.compute(inputArray.tolist(), learn=learn)
 
     response = tm.getState(*stateSnapshots)
+
+    if reset:
+      print "Resetting TM."
+      tm.reset()
 
     web.header("Content-Type", "application/json")
     jsonOut = json.dumps(response)
