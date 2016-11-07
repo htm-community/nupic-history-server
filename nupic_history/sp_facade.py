@@ -5,6 +5,7 @@ import numpy as np
 
 from nupic_history import SpSnapshots as SNAPS
 from nupic_history.utils import compressSdr
+from nupic.math import topology
 
 
 class SpFacade(object):
@@ -408,9 +409,8 @@ class SpFacade(object):
 
   def _getInhibitionMask(self, colIndex):
     sp = self._sp
-    maskNeighbors = sp._getNeighborsND(
-      colIndex, sp._columnDimensions,
-      sp._inhibitionRadius
-    )
+    maskNeighbors = topology.neighborhood(
+      colIndex, sp._inhibitionRadius, sp._columnDimensions
+    ).tolist()
     return maskNeighbors
 
