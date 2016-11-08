@@ -12,7 +12,7 @@ This relies very heavily on Redis as an in-memory cache (instead of using web se
 ## Installing
 
 > This project generally runs on tip of master in NuPIC, so you need:
-> 
+>
 > - nupic==0.5.7.dev0
 > - nupic.bindings==0.4.13.dev0
 
