@@ -21,6 +21,7 @@ urls = (
   "/_sp/", "SpInterface",
   "/_sp/(.+)/history/(.+)", "SpHistory",
   "/_tm/", "TmInterface",
+  "/_flush/", "RoyalFlush",
 )
 web.config.debug = False
 app = web.application(urls, globals())
@@ -56,7 +57,7 @@ class SpInterface:
         # Remove potential duplicates from both
         returnSnapshots = list(set(returnSnapshots))
         saveSnapshots = list(set(saveSnapshots))
-    # from pprint import pprint; pprint(params);
+    from pprint import pprint; pprint(params);
     sp = SP(**params)
     spFacade = nupicHistory.createSpFacade(sp, save=saveSnapshots)
     modelId = spFacade.getId()
@@ -231,6 +232,14 @@ class TmInterface:
     print("\tTM compute cycle took %g seconds" % (requestEnd - requestStart))
 
     return jsonOut
+
+
+class RoyalFlush:
+
+
+  def DELETE(self):
+    nupicHistory.nuke()
+    return "NuPIC History Server got NUKED!"
 
 
 

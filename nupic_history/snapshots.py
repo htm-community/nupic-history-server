@@ -46,8 +46,7 @@ class SpSnapshots(Snapshots):
   ACT_DC = "activeDutyCycles"
   OVP_DC = "overlapDutyCycles"
   INH_MASKS = "inhibitionMasks"
-
-
+  BST_FCTRS = "boostFactors"
 
 
 class TmSnapshots(Snapshots):

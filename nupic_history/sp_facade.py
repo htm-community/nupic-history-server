@@ -372,6 +372,18 @@ class SpFacade(object):
       )
 
 
+  def _conjureBoostFactors(self, iteration=None, **kwargs):
+    if self._retrieveFromAlgorithm(iteration):
+      sp = self._sp
+      boostFactors = self._getZeroedColumns()
+      sp.getBoostFactors(boostFactors)
+      return boostFactors.tolist()
+    else:
+      return self._redisClient.getLayerStateByIteration(
+        self.getId(), SNAPS.BST_FCTRS, iteration
+      )
+
+
   def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
     if self._retrieveFromAlgorithm(iteration):
       sp = self._sp
