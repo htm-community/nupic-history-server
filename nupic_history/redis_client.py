@@ -61,17 +61,22 @@ class RedisClient(object):
     )
 
 
-  def nuke(self):
-    # Nukes absolutely all data saved about SP instances.
-    rds = self._redis
-    models = rds.get(self.MODEL_LIST)
-    deleted = 0
-    if models is not None:
-      models = msgpack.loads(models)["models"]
-      for modelId in models:
-        deleted += self.delete(modelId)
-      deleted += rds.delete(self.MODEL_LIST)
-    print "Deleted {} Redis keys.".format(deleted)
+  def nuke(self, flush=False):
+    # Flush check, wiggle the handle...
+    if flush:
+      self._redis.flushdb()
+      print "Flushed Redis completely."
+    else:
+      # Nuke absolutely all data saved about SP instances.
+      rds = self._redis
+      models = rds.get(self.MODEL_LIST)
+      deleted = 0
+      if models is not None:
+        models = msgpack.loads(models)["models"]
+        for modelId in models:
+          deleted += self.delete(modelId)
+        deleted += rds.delete(self.MODEL_LIST)
+      print "Deleted {} Redis keys.".format(deleted)
 
 
   def delete(self, modelId):

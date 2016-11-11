@@ -74,4 +74,4 @@ class NupicHistory(object):
     Removes all traces of NuPIC History from Redis.
     :return:
     """
-    self._redisClient.nuke()
+    self._redisClient.nuke(flush=True)
