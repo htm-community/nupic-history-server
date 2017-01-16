@@ -92,7 +92,7 @@ class TmFacade(object):
 
   def save(self):
     """
-    Saves the current state of the SP to Redis.
+    Saves the current state of the TM to Redis.
     """
     if self._save is not None and len(self._save) > 0:
       if not self.isActive():

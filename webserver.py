@@ -10,17 +10,22 @@ from nupic.research.temporal_memory import TemporalMemory as TM
 from nupic_history import NupicHistory
 from nupic_history import SpSnapshots as SP_SNAPS
 from nupic_history import TmSnapshots as TM_SNAPS
+from nupic.algorithms.sdr_classifier_factory import SDRClassifierFactory
+
 
 global spFacades
 spFacades = {}
 tmFacades = {}
+classifiers = {}
+counts = {}
 nupicHistory = NupicHistory()
 
 urls = (
   "/", "Index",
-  "/_sp/", "SpInterface",
-  "/_sp/(.+)/history/(.+)", "SpHistory",
-  "/_tm/", "TmInterface",
+  "/_sp/", "SpRoute",
+  "/_sp/(.+)/history/(.+)", "SpHistoryRoute",
+  "/_tm/", "TmRoute",
+  "/_compute/", "ComputeRoute",
   "/_flush/", "RoyalFlush",
 )
 web.config.debug = False
@@ -35,7 +40,7 @@ class Index:
     return "NuPIC History Server"
 
 
-class SpInterface:
+class SpRoute:
 
 
   def POST(self):
@@ -108,7 +113,9 @@ class SpInterface:
     if "learn" in requestInput:
       learn = requestInput["learn"] == "true"
 
-    inputArray = np.array([int(bit) for bit in encoding.split(",")])
+    inputArray = np.array([])
+    if len(encoding):
+      inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
     print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
     sp.compute(inputArray, learn=learn)
@@ -125,7 +132,7 @@ class SpInterface:
 
 
 
-class SpHistory:
+class SpHistoryRoute:
 
   def GET(self, modelId, columnIndex):
     """
@@ -139,7 +146,7 @@ class SpHistory:
 
 
 
-class TmInterface:
+class TmRoute:
 
 
   def POST(self):
@@ -164,6 +171,8 @@ class TmInterface:
     )
     modelId = tmFacade.getId()
     tmFacades[modelId] = tmFacade
+    classifiers[modelId] = SDRClassifierFactory.create()
+    counts[modelId] = 0
 
     print "Created TM {} | Saving: {}".format(modelId, saveSnapshots)
 
@@ -214,7 +223,9 @@ class TmInterface:
     if "reset" in requestInput:
       reset = requestInput["reset"] == "true"
 
-    inputArray = np.array([int(bit) for bit in encoding.split(",")])
+    inputArray = np.array([])
+    if len(encoding):
+      inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
     print "Entering TM {} compute cycle | Learning: {}".format(modelId, learn)
     tm.compute(inputArray.tolist(), learn=learn)
@@ -230,6 +241,115 @@ class TmInterface:
 
     requestEnd = time.time()
     print("\tTM compute cycle took %g seconds" % (requestEnd - requestStart))
+
+    return jsonOut
+
+
+class ComputeRoute:
+
+  def PUT(self):
+    requestStart = time.time()
+    requestInput = web.input()
+    encoding = web.data()
+    spSnapshots = [
+      SP_SNAPS.ACT_COL,
+    ]
+    tmSnapshots = [
+      TM_SNAPS.ACT_CELLS,
+      TM_SNAPS.PRD_CELLS,
+    ]
+
+    for snap in SP_SNAPS.listValues():
+      getString = "get{}{}".format(snap[:1].upper(), snap[1:])
+      if getString in requestInput and requestInput[getString] == "true":
+        spSnapshots.append(snap)
+
+    for snap in TM_SNAPS.listValues():
+      getString = "get{}{}".format(snap[:1].upper(), snap[1:])
+      if getString in requestInput and requestInput[getString] == "true":
+        tmSnapshots.append(snap)
+
+    if "id" not in requestInput:
+      print "Request must include a model id."
+      return web.badrequest()
+
+    modelId = requestInput["id"]
+
+    if modelId not in spFacades.keys():
+      print "Unknown SP id {}!".format(modelId)
+      return web.badrequest()
+
+    sp = spFacades[modelId]
+
+    learn = True
+    if "learn" in requestInput:
+      learn = requestInput["learn"] == "true"
+
+    inputArray = np.array([])
+    if len(encoding):
+      inputArray = np.array([int(bit) for bit in encoding.split(",")])
+
+    print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
+    sp.compute(inputArray, learn=learn)
+    spResults = sp.getState(*spSnapshots)
+    activeColumns = spResults[SP_SNAPS.ACT_COL]['indices']
+    print activeColumns
+    print type(activeColumns)
+
+    tm = tmFacades[modelId]
+
+    reset = False
+    if "reset" in requestInput:
+      reset = requestInput["reset"] == "true"
+
+    print "Entering TM {} compute cycle | Learning: {}".format(modelId, learn)
+    tm.compute(activeColumns, learn=learn)
+
+    tmResults = tm.getState(*tmSnapshots)
+
+    # c = classifiers[modelId]
+    # bucketIdx = None
+    # actValue = None
+    #
+    # # learning
+    # c.compute(
+    #   recordNum=counts[modelId], patternNZ=response.activeCells,
+    #   classification={"bucketIdx": bucketIdx, "actValue": actValue},
+    #   learn=True, infer=False
+    # )
+    #
+    # # inference
+    # result = c.compute(
+    #   recordNum=counts[modelId], patternNZ=response.activeCells,
+    #   classification={"bucketIdx": bucketIdx, "actValue": actValue},
+    #   learn=False, infer=True
+    # )
+    #
+    # # Print the top three predictions for 1 steps out.
+    # topPredictions = sorted(
+    #   zip(
+    #     result[1], result["actualValues"]
+    #   ), reverse=True
+    # )[:3]
+    # for probability, value in topPredictions:
+    #   print "Prediction of {} has probability of {}.".format(
+    #     value, probability*100.0
+    #   )
+    #
+
+    if reset:
+      print "Resetting TM."
+      tm.reset()
+
+    completeResults = {}
+    completeResults.update(spResults)
+    completeResults.update(tmResults)
+
+    web.header("Content-Type", "application/json")
+    jsonOut = json.dumps(completeResults)
+
+    requestEnd = time.time()
+    print("\tFULL compute cycle took %g seconds" % (requestEnd - requestStart))
 
     return jsonOut
 
