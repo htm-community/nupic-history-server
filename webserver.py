@@ -307,35 +307,28 @@ class ComputeRoute:
 
     tmResults = tm.getState(*tmSnapshots)
 
-    # c = classifiers[modelId]
-    # bucketIdx = None
-    # actValue = None
-    #
-    # # learning
-    # c.compute(
-    #   recordNum=counts[modelId], patternNZ=response.activeCells,
-    #   classification={"bucketIdx": bucketIdx, "actValue": actValue},
-    #   learn=True, infer=False
-    # )
-    #
-    # # inference
-    # result = c.compute(
-    #   recordNum=counts[modelId], patternNZ=response.activeCells,
-    #   classification={"bucketIdx": bucketIdx, "actValue": actValue},
-    #   learn=False, infer=True
-    # )
-    #
-    # # Print the top three predictions for 1 steps out.
-    # topPredictions = sorted(
-    #   zip(
-    #     result[1], result["actualValues"]
-    #   ), reverse=True
-    # )[:3]
-    # for probability, value in topPredictions:
-    #   print "Prediction of {} has probability of {}.".format(
-    #     value, probability*100.0
-    #   )
-    #
+    c = classifiers[modelId]
+    bucketIdx = requestInput["bucketIdx"]
+    actValue = requestInput["actValue"]
+    count = counts[modelId]
+
+    # inference
+    inference = c.compute(
+      recordNum=count, patternNZ=tmResults[TM_SNAPS.ACT_CELLS],
+      classification={"bucketIdx": bucketIdx, "actValue": actValue},
+      learn=True, infer=True
+    )
+
+    # Print the top three predictions for 1 steps out.
+    topPredictions = sorted(
+      zip(
+        inference[1], inference["actualValues"]
+      ), reverse=True
+    )[:3]
+    for probability, value in topPredictions:
+      print "Prediction of {} has probability of {}.".format(
+        value, probability*100.0
+      )
 
     if reset:
       print "Resetting TM."
@@ -344,12 +337,15 @@ class ComputeRoute:
     completeResults = {}
     completeResults.update(spResults)
     completeResults.update(tmResults)
+    completeResults["inference"] = topPredictions
 
     web.header("Content-Type", "application/json")
     jsonOut = json.dumps(completeResults)
 
     requestEnd = time.time()
     print("\tFULL compute cycle took %g seconds" % (requestEnd - requestStart))
+
+    counts[modelId] += 1
 
     return jsonOut
 
