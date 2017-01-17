@@ -281,16 +281,16 @@ class ComputeRoute:
 
     sp = spFacades[modelId]
 
-    learn = True
-    if "learn" in requestInput:
-      learn = requestInput["learn"] == "true"
+    spLearn = True
+    if "spLearn" in requestInput:
+      spLearn = requestInput["spLearn"] == "true"
 
     inputArray = np.array([])
     if len(encoding):
       inputArray = np.array([int(bit) for bit in encoding.split(",")])
 
-    print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
-    sp.compute(inputArray, learn=learn)
+    print "Entering SP {} compute cycle | Learning: {}".format(modelId, spLearn)
+    sp.compute(inputArray, learn=spLearn)
     spResults = sp.getState(*spSnapshots)
     activeColumns = spResults[SP_SNAPS.ACT_COL]['indices']
     print activeColumns
@@ -298,12 +298,16 @@ class ComputeRoute:
 
     tm = tmFacades[modelId]
 
+    tmLearn = True
+    if "tmLearn" in requestInput:
+      tmLearn = requestInput["tmLearn"] == "true"
+
     reset = False
     if "reset" in requestInput:
       reset = requestInput["reset"] == "true"
 
-    print "Entering TM {} compute cycle | Learning: {}".format(modelId, learn)
-    tm.compute(activeColumns, learn=learn)
+    print "Entering TM {} compute cycle | Learning: {}".format(modelId, tmLearn)
+    tm.compute(activeColumns, learn=tmLearn)
 
     tmResults = tm.getState(*tmSnapshots)
 
