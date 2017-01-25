@@ -167,6 +167,20 @@ class TmFacade(object):
     return out
 
 
+  def _synapseToDict(self, synapse):
+    return {
+      "presynapticCell": synapse.presynapticCell,
+      "permanence": synapse.permanence,
+    }
+
+
+  def _segmentToDict(self, segment):
+    return {
+      "cell": segment.cell,
+      "synapses": [self._synapseToDict(s) for s in segment._synapses],
+    }
+
+
   def _getSnapshot(self, name, iteration=None):
     # Use the cache if we can.
     if name in self._state and iteration == self._iteration:
@@ -211,4 +225,17 @@ class TmFacade(object):
       out = self._redisClient.getLayerStateByIteration(
         self.getId(), SNAPS.PRD_CELLS, iteration
       )
+    return out
+
+
+  def _conjureActiveSegments(self, iteration=None):
+    if self._retrieveFromAlgorithm(iteration):
+      print "** getting active segments from TM instance"
+      out = [self._segmentToDict(c) for c in self._tm.getActiveSegments()]
+    else:
+      raise Exception('REDIS storage of active segments is not implemented');
+      # print "** getting active segments from Redis"
+      # out = self._redisClient.getLayerStateByIteration(
+      #   self.getId(), SNAPS.ACT_SEGS, iteration
+      # )
     return out

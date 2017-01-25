@@ -53,3 +53,4 @@ class TmSnapshots(Snapshots):
 
   ACT_CELLS = "activeCells"
   PRD_CELLS = "predictiveCells"
+  ACT_SEGS = "activeSegments"

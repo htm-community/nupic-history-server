@@ -293,8 +293,6 @@ class ComputeRoute:
     sp.compute(inputArray, learn=spLearn)
     spResults = sp.getState(*spSnapshots)
     activeColumns = spResults[SP_SNAPS.ACT_COL]['indices']
-    print activeColumns
-    print type(activeColumns)
 
     tm = tmFacades[modelId]
 
