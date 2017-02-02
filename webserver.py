@@ -44,9 +44,10 @@ class SpRoute:
 
 
   def POST(self):
+    """ Creates a new SP. """
     global spFacades
     params = json.loads(web.data())
-    requestInput = web.input()
+    # requestInput = web.input()
     # We will always return the initial state of columns and overlaps because
     # they are cheap.
     returnSnapshots = [
@@ -54,17 +55,17 @@ class SpRoute:
       SP_SNAPS.OVERLAPS
     ]
     saveSnapshots = []
-    if __name__ == '__main__':
-      if "save" in requestInput and len(requestInput["save"]) > 0:
-        saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
-        # Be sure to also return any snapshots that were specified to be saved.
-        returnSnapshots += saveSnapshots
-        # Remove potential duplicates from both
-        returnSnapshots = list(set(returnSnapshots))
-        saveSnapshots = list(set(saveSnapshots))
-    from pprint import pprint; pprint(params);
+    # if __name__ == '__main__':
+    #   if "save" in requestInput and len(requestInput["save"]) > 0:
+    #     saveSnapshots += [str(s) for s in requestInput["save"].split(",")]
+    #     # Be sure to also return any snapshots that were specified to be saved.
+    #     returnSnapshots += saveSnapshots
+    #     # Remove potential duplicates from both
+    #     returnSnapshots = list(set(returnSnapshots))
+    #     saveSnapshots = list(set(saveSnapshots))
+    from pprint import pprint; pprint(params)
     sp = SP(**params)
-    spFacade = nupicHistory.createSpFacade(sp, save=saveSnapshots)
+    spFacade = nupicHistory.createSpFacade(sp, save=True)
     modelId = spFacade.getId()
     spFacades[modelId] = spFacade
 

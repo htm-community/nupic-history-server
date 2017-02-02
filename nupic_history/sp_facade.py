@@ -10,7 +10,7 @@ from nupic.math import topology
 
 class SpFacade(object):
 
-  def __init__(self, sp, redisClient, save=None, modelId=None):
+  def __init__(self, sp, redisClient, save=False, modelId=None):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
@@ -31,14 +31,11 @@ class SpFacade(object):
       else:
         self._id = modelId
       self._iteration = -1
-    self._state = None
     self._input = None
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
-    self._save = None
-    if save is not None:
-      self._save = save[:]
-    self._adjustSavedSnapshots()
+    self._save = save
+    # self._adjustSavedSnapshots()
 
 
   def __str__(self):
@@ -169,40 +166,45 @@ class SpFacade(object):
     if "columnIndex" in kwargs:
       columnIndex = kwargs["columnIndex"]
 
-    if self._state is None:
-      self._state = {}
+    sp = self.getSpForIteration(iteration, columnIndex)
+
     out = dict()
     for snap in args:
       if not SNAPS.contains(snap):
         raise ValueError("{} is not available in SP History.".format(snap))
       out[snap] = self._getSnapshot(
-        snap, iteration=iteration, columnIndex=columnIndex
+        sp, snap, iteration=iteration, columnIndex=columnIndex
       )
     return out
+
+
+  def getSpForIteration(self, iteration, columnIndex):
+    if self._retrieveFromAlgorithm(iteration, columnIndex):
+      return self._sp
+    else:
+      return self._redisClient.loadSp(self.getId(), iteration)
 
 
   def save(self):
     """
     Saves the current state of the SP to Redis.
     """
-    if self._save is not None and len(self._save) > 0:
+    if self._save:
       if not self.isActive():
         raise RuntimeError("Cannot save an inactive SP Facade.")
       if self.getInput() is None:
         raise ValueError(
           "Cannot save SP state because it has never seen input.")
-      spid = self.getId()
-      params = self.getParams()
-      iteration = self.getIteration()
-      state = self.getState(*self._save)
-      self._redisClient.saveSpState(spid, params, iteration, state)
+      id = self.getId()
+      self._redisClient.saveInput(id, self._input, self._iteration)
+      self._redisClient.saveSp(id, self._sp, self._iteration)
 
 
   def delete(self):
     """
     Deletes all traces of this SP instance from Redis.
     """
-    self._redisClient.delete(self.getId())
+    self._redisClient.deleteSp(self.getId())
 
 
   def getNumColumns(self):
@@ -213,28 +215,27 @@ class SpFacade(object):
     return self.getParams()["numColumns"]
 
 
-  def _adjustSavedSnapshots(self):
-    # If user specified to save connected synapses, we'll switch it to
-    # permanences. We are actually not saving connected synapses at all. They
-    # are always calculated from permanences.
-    save = self._save
-    if save is not None and len(save) > 0 and SNAPS.CON_SYN in save:
-      save.remove(SNAPS.CON_SYN)
-      if SNAPS.PERMS not in save:
-        save.append(SNAPS.PERMS)
+  # def _adjustSavedSnapshots(self):
+  #   # If user specified to save connected synapses, we'll switch it to
+  #   # permanences. We are actually not saving connected synapses at all. They
+  #   # are always calculated from permanences.
+  #   save = self._save
+  #   if save is not None and len(save) > 0 and SNAPS.CON_SYN in save:
+  #     save.remove(SNAPS.CON_SYN)
+  #     if SNAPS.PERMS not in save:
+  #       save.append(SNAPS.PERMS)
 
 
 
   def _advance(self):
-    self._state = None
     self._iteration += 1
 
 
   def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
     return self.isActive() \
-           and (
-             (iteration is None and columnIndex is None)
-             or iteration == self.getIteration())
+       and (
+         (iteration is None and columnIndex is None)
+         or iteration == self.getIteration())
 
 
   def _getZeroedColumns(self):
@@ -247,16 +248,10 @@ class SpFacade(object):
     return np.zeros(shape=(numInputs,))
 
 
-  def _getSnapshot(self, name, iteration=None, columnIndex=None):
-    # Use the cache if we can.
-    if name in self._state and iteration == self._iteration:
-      return self._state[name]
-    else:
-      funcName = "_conjure{}".format(name[:1].upper() + name[1:])
-      func = getattr(self, funcName)
-      result = func(iteration=iteration, columnIndex=columnIndex)
-      self._state[name] = result
-      return result
+  def _getSnapshot(self, sp, name, iteration=None, columnIndex=None):
+    funcName = "_conjure{}".format(name[:1].upper() + name[1:])
+    func = getattr(self, funcName)
+    return func(sp, iteration=iteration, columnIndex=columnIndex)
 
 
   # None of the "_conjureXXX" functions below are directly called. They are all
@@ -269,158 +264,85 @@ class SpFacade(object):
   # iteration in the past is specified, Redis will be the data source.
 
 
-  def _conjureInput(self, iteration=None, **kwargs):
+  def _conjureInput(self, sp, iteration=None, **kwargs):
     if self._retrieveFromAlgorithm(iteration):
       return compressSdr(self._input)
     else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.INPUT, iteration
-      )
+      return self._redisClient.loadInput(self.getId(), iteration)
 
 
-  def _conjureActiveColumns(self, iteration=None, columnIndex=None):
+  def _conjureActiveColumns(self, sp, iteration=None, columnIndex=None):
     if self._retrieveFromAlgorithm(iteration, columnIndex):
       out = compressSdr(self._activeColumns)
     else:
-      if columnIndex is None:
-        out = self._redisClient.getLayerStateByIteration(
-          self.getId(), SNAPS.ACT_COL, iteration
-        )
-      else:
-        out = self._redisClient.getActiveColumnsByColumn(
-          self.getId(), columnIndex, self.getIteration() + 1
-        )
+      out = sp.getActiveColumns()
     return out
 
 
-  def _conjureOverlaps(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      return self._sp.getOverlaps().tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.OVERLAPS, iteration
-      )
+  def _conjureOverlaps(self, sp, iteration=None, **kwargs):
+    sp.getOverlaps().tolist()
 
 
-  def _conjurePotentialPools(self, **kwargs):
+  def _conjurePotentialPools(self, sp, **kwargs):
     if self._potentialPools is None:
-      if self.isActive():
-        sp = self._sp
-        self._potentialPools = []
-        for colIndex in range(0, sp.getNumColumns()):
-          potentialPools = []
-          potentialPoolsIndices = []
-          sp.getPotential(colIndex, potentialPools)
-          for i, pool in enumerate(potentialPools):
-            if np.asscalar(pool) == 1.0:
-              potentialPoolsIndices.append(i)
-          self._potentialPools.append(potentialPoolsIndices)
-      else:
-        self._potentialPools = self._redisClient.getPotentialPools(self.getId())
+      self._potentialPools = []
+      for colIndex in range(0, sp.getNumColumns()):
+        potentialPools = []
+        potentialPoolsIndices = []
+        sp.getPotential(colIndex, potentialPools)
+        for i, pool in enumerate(potentialPools):
+          if np.asscalar(pool) == 1.0:
+            potentialPoolsIndices.append(i)
+        self._potentialPools.append(potentialPoolsIndices)
     return self._potentialPools
 
 
-  def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
+  def _conjureConnectedSynapses(self, sp, **kwargs):
     columns = []
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      sp = self._sp
-      for colIndex in range(0, sp.getNumColumns()):
-        connectedSynapses = self._getZeroedInput()
-        sp.getConnectedSynapses(colIndex, connectedSynapses)
-        columns.append(np.nonzero(connectedSynapses)[0].tolist())
-    else:
-      # Check the cache for permanences before calling to fetch them.
-      if SNAPS.PERMS in self._state:
-        perms = self._state[SNAPS.PERMS]
-      else:
-        perms = self._conjurePermanences(iteration=iteration, columnIndex=columnIndex)
-      threshold = self.getParams()["synPermConnected"]
-      for columnPerms in perms:
-        colConnections = []
-        for perm in columnPerms:
-          bit = 0
-          if perm > threshold:
-            bit = 1
-          colConnections.append(bit)
-        columns.append(colConnections)
+    for colIndex in range(0, sp.getNumColumns()):
+      connectedSynapses = self._getZeroedInput()
+      sp.getConnectedSynapses(colIndex, connectedSynapses)
+      columns.append(np.nonzero(connectedSynapses)[0].tolist())
     return columns
 
 
-  def _conjurePermanences(self, iteration=None, columnIndex=None):
+  def _conjurePermanences(self, sp, **kwargs):
     out = []
     numColumns = self.getNumColumns()
-    sp = self._sp
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      for colIndex in range(0, numColumns):
-        perms = self._getZeroedInput()
-        sp.getPermanence(colIndex, perms)
-        out.append([round(perm, 2) for perm in perms.tolist()])
-    else:
-      out = self._getStateFor(SNAPS.PERMS, columnIndex, iteration, numColumns, out)
+    for colIndex in range(0, numColumns):
+      perms = self._getZeroedInput()
+      sp.getPermanence(colIndex, perms)
+      out.append([round(perm, 2) for perm in perms.tolist()])
     return out
 
 
-  def _conjureActiveDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      dutyCycles = self._getZeroedColumns()
-      sp.getActiveDutyCycles(dutyCycles)
-      return dutyCycles.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.ACT_DC, iteration
-      )
+  def _conjureActiveDutyCycles(self, sp, **kwargs):
+    dutyCycles = self._getZeroedColumns()
+    sp.getActiveDutyCycles(dutyCycles)
+    return dutyCycles.tolist()
 
 
-  def _conjureBoostFactors(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      boostFactors = self._getZeroedColumns()
-      sp.getBoostFactors(boostFactors)
-      return boostFactors.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.BST_FCTRS, iteration
-      )
+  def _conjureBoostFactors(self, sp, **kwargs):
+    boostFactors = self._getZeroedColumns()
+    sp.getBoostFactors(boostFactors)
+    return boostFactors.tolist()
 
 
-  def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      dutyCycles = self._getZeroedColumns()
-      sp.getOverlapDutyCycles(dutyCycles)
-      return dutyCycles.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.OVP_DC, iteration
-      )
+  def _conjureOverlapDutyCycles(self, sp, **kwargs):
+    dutyCycles = self._getZeroedColumns()
+    sp.getOverlapDutyCycles(dutyCycles)
+    return dutyCycles.tolist()
 
 
-  def _conjureInhibitionMasks(self, iteration=None, columnIndex=None):
+  def _conjureInhibitionMasks(self, sp, **kwargs):
     out = []
     numColumns = self.getNumColumns()
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      for colIndex in range(0, numColumns):
-        out.append(self._getInhibitionMask(colIndex))
-    else:
-      out = self._getStateFor(SNAPS.INH_MASKS, columnIndex, iteration, numColumns, out)
+    for colIndex in range(0, numColumns):
+      out.append(self._getInhibitionMask(sp, colIndex))
     return out
 
 
-  def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
-    if columnIndex is None:
-      out = self._redisClient.getStateByIteration(
-        self.getId(), snap, iteration, numColumns
-      )
-    else:
-      out = self._redisClient.getStatebyColumn(
-        self.getId(), snap, columnIndex, self.getIteration() + 1
-      )
-    return out
-
-
-  def _getInhibitionMask(self, colIndex):
-    sp = self._sp
+  def _getInhibitionMask(self, sp, colIndex):
     maskNeighbors = topology.neighborhood(
       colIndex, sp._inhibitionRadius, sp._columnDimensions
     ).tolist()
