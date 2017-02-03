@@ -3,8 +3,8 @@ import inspect
 
 class Snapshots(object):
   """
-  This is kindof an Enum. Used to enumerate the different data snapshots the
-  SpFacades make available.
+  This is kindof an Enum. Used to enumerate the different data snapshots
+  available from different algorithms. Snapshots should be indexed by time step.
   """
 
   @classmethod

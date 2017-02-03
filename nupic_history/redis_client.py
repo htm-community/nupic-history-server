@@ -1,35 +1,172 @@
 import sys
+import os
 import time
-import msgpack
+import json
 
+import capnp
 import redis
 
 from nupic_history import SpSnapshots as SP_SNAPS
 from nupic_history import TmSnapshots as TM_SNAPS
 
+from nupic.proto import SpatialPoolerProto_capnp
+from nupic.research.spatial_pooler import SpatialPooler
 
 
-class RedisClient(object):
+class FileIoClient(object):
 
-  # Redis keys.
-  MODEL_LIST = "model_list"
-  SP_PARAMS = "{}_sp_params"          # spid
-  TM_PARAMS = "{}_tm_params"          # tmid
-  SP_POT_POOLS = "{}_potentialPools"  # spid
-  SP_INH_MASKS = "{}_inhibitionMasks" # spid
-  GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
-  COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index,
-                                      # storage type
+  # File names.
+  SP_KEY = "htm_sp_{}_{}.npc"               # modelId, iteration
+  SP_ITER = "htm_sp_{}_?.npc"               # modelId
+  ENCODING = "htm_encoding_{}_{}.npc"       # modelId, iteration
+  SP_ACT_COL = "htm_spac_{}_{}.npc"        # modelId, iteration
+  # MODEL_LIST = "model_list"
+  # SP_PARAMS = "{}_sp_params"          # spid
+  # TM_PARAMS = "{}_tm_params"          # tmid
+  # SP_POT_POOLS = "{}_potentialPools"  # spid
+  # SP_INH_MASKS = "{}_inhibitionMasks" # spid
+  # GLOBAL_VALS = "{}_{}_{}"            # spid, iteration, storage type
+  # COLUMN_VALS = "{}_{}_col-{}_{}"     # spid, iteration, column index,
+  #                                     # storage type
 
-  def __init__(self, host="localhost", port=6379):
-    self._redis = redis.Redis(host=host, port=port)
+  def __init__(self, workingDir=None):
+    if workingDir is None:
+      workingDir = "/tmp"
+    self._workingDir = workingDir
 
 
-  def saveSpatialPooler(self, sp, id, iteration):
-    pass
+  def _writeData(self, key, data):
+    path = self._workingDir + "/" + key
+    with open(path, "w") as fileout:
+      fileout.write(json.dumps(data))
 
-  # def listSpIds(self):
-  #   return msgpack.loads(self._redis.get(self.MODEL_LIST))["sps"]
+
+  def _readData(self, key):
+    path = self._workingDir + "/" + key
+    with open(path, "r") as f:
+      return json.loads(f.read())
+
+
+  def _writePrototype(self, key, proto):
+    path = self._workingDir + "/" + key
+    with open(path, "w") as fileout:
+      proto.write(fileout)
+
+
+  def saveEncoding(self, encoding, id, iteration):
+    start = time.time() * 1000
+    size = sys.getsizeof(encoding)
+    key = self.ENCODING.format(id, iteration)
+    self._writeData(key, encoding)
+    end = time.time() * 1000
+    print "{} input serialization of {} bytes into {} took {} ms".format(
+      id, size, key, (end - start)
+    )
+
+
+  def saveActiveColumns(self, activeColumns, id, iteration):
+    start = time.time() * 1000
+    size = sys.getsizeof(activeColumns)
+    key = self.SP_ACT_COL.format(id, iteration)
+    self._writeData(key, activeColumns)
+    end = time.time() * 1000
+    print "{} activeColumns serialization of {} bytes into {} took {} ms".format(
+      id, size, key, (end - start)
+    )
+
+
+  def saveSpatialPooler(self, sp, id, iteration=None):
+    """
+    :param iteration: If not provided that means the SP is not running yet (-1).
+    """
+    start = time.time() * 1000
+
+    if iteration is None:
+      iteration = -1
+    proto = SpatialPoolerProto_capnp.SpatialPoolerProto.new_message()
+    sp.write(proto)
+    key = self.SP_KEY.format(id, iteration)
+    self._writePrototype(key, proto)
+
+    end = time.time() * 1000
+    print "{} SP storage into {} took {} ms".format(
+      id, key, (end - start)
+    )
+
+
+  def loadSpatialPooler(self, id, iteration=None):
+    start = time.time() * 1000
+
+    if iteration is None:
+      iteration = self.getMaxIteration(id)
+    key = self.SP_KEY.format(id, iteration)
+    path = self._workingDir + "/" + key
+    with open(path, "r") as spFile:
+      proto = SpatialPoolerProto_capnp.SpatialPoolerProto.read(spFile)
+
+    sp = SpatialPooler.read(proto)
+
+    end = time.time() * 1000
+    print "{} SP de-serialization from {} took {} ms".format(
+      id, key, (end - start)
+    )
+    return sp, iteration
+
+
+  def getMaxIteration(self, modelId):
+    maxIteration = -1
+    # We will use active columns keys to find the max iteration.
+    keys = os.listdir(self._workingDir)
+    if len(keys) > 0:
+      maxIteration = max([int(key.split("_")[3].split(".")[0]) for key in keys])
+    return maxIteration
+
+
+  def nuke(self):
+    folder = self._workingDir
+    for f in os.listdir(folder):
+      p = os.path.join(folder, f)
+      try:
+        if os.path.isfile(p):
+          os.unlink(p)
+      except Exception as e:
+        print(e)
+
+
+
+      # def saveInput(self, id, input, step):
+  #   compressedInput = compressSdr(input)
+  #   size = sys.getsizeof(compressedInput)
+  #   print("Saving Input Encoding ({}) at step {}".format(id, step))
+  #   self._write('htm_input_{}_{}'.format(id, step), compressedInput)
+  #   return size
+  #
+  # def loadInput(self, id, step):
+  #   return self._read('htm_input_{}_{}'.format(id, step))
+  #
+  # def saveSp(self, id, sp, step):
+  #   proto = SpatialPoolerProto_capnp.SpatialPoolerProto.new_message()
+  #   sp.write(proto)
+  #   bytes = proto.to_bytes_packed()
+  #   size = sys.getsizeof(bytes)
+  #   print("Saving Spatial Pooler ({}) at step {}".format(id, step))
+  #   self._write('htm_sp_{}_{}'.format(id, step), bytes)
+  #   return size
+  #
+  # def deleteModel(self, id):
+  #   rds = self._redis
+  #   keys = rds.keys("htm_*_{}_*".format(id))
+  #   deleted = 0
+  #   if keys is not None:
+  #     for modelId in keys:
+  #       deleted += self.delete(modelId)
+  #     deleted += rds.delete(self.MODEL_LIST)
+  #   print "Deleted Model {} ({} redis keys)".format(id, deleted)
+
+
+
+      # def listSpIds(self):
+  #   return msgpack.loads(self._read(self.MODEL_LIST))["sps"]
   #
   #
   # def saveSpState(self, spid, spParams, iteration, state):
@@ -64,24 +201,6 @@ class RedisClient(object):
   #   )
   #
   #
-  # def nuke(self, flush=False):
-  #   # Flush check, wiggle the handle...
-  #   if flush:
-  #     self._redis.flushdb()
-  #     print "Flushed Redis completely."
-  #   else:
-  #     # Nuke absolutely all data saved about SP instances.
-  #     rds = self._redis
-  #     models = rds.get(self.MODEL_LIST)
-  #     deleted = 0
-  #     if models is not None:
-  #       models = msgpack.loads(models)["models"]
-  #       for modelId in models:
-  #         deleted += self.delete(modelId)
-  #       deleted += rds.delete(self.MODEL_LIST)
-  #     print "Deleted {} Redis keys.".format(deleted)
-  #
-  #
   # def delete(self, modelId):
   #   rds = self._redis
   #   deleted = 0
@@ -99,12 +218,12 @@ class RedisClient(object):
   #
   #
   # def getSpParams(self, modelId):
-  #   params = msgpack.loads(self._redis.get(self.SP_PARAMS.format(modelId)))
+  #   params = msgpack.loads(self._read(self.SP_PARAMS.format(modelId)))
   #   return params["params"]
   #
   #
   # def getTmParams(self, modelId):
-  #   params = msgpack.loads(self._redis.get(self.TM_PARAMS.format(modelId)))
+  #   params = msgpack.loads(self._read(self.TM_PARAMS.format(modelId)))
   #   return params["params"]
   #
   #
@@ -181,7 +300,7 @@ class RedisClient(object):
   #
   #
   # def _getSnapshot(self, stateType, key):
-  #   raw = self._redis.get(key)
+  #   raw = self._read(key)
   #   out = []
   #   if raw is not None:
   #     out = msgpack.loads(raw)[stateType]
@@ -261,7 +380,7 @@ class RedisClient(object):
   #
   #
   # def _updateRegistry(self, modelId):
-  #   models = self._redis.get(self.MODEL_LIST)
+  #   models = self._read(self.MODEL_LIST)
   #   if models is None:
   #     models = {"models": [modelId]}
   #   else:
@@ -291,5 +410,5 @@ class RedisClient(object):
   # def _saveObject(self, key, obj):
   #   msgpackString = msgpack.dumps(obj)
   #   size = sys.getsizeof(msgpackString)
-  #   self._redis.set(key, msgpackString)
+  #   self._write(key, msgpackString)
   #   return size

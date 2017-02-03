@@ -10,14 +10,14 @@ from nupic.research.temporal_memory import TemporalMemory as TM
 
 from nupic_history import NupicHistory
 from nupic_history import SpSnapshots as SP_SNAPS
-from nupic_history.redis_client import RedisClient
+from nupic_history.redis_client import FileIoClient
+from nupic_history.sp_facade import SpFacade
 from nupic_history import TmSnapshots as TM_SNAPS
 from nupic.algorithms.sdr_classifier_factory import SDRClassifierFactory
 
 
-redisClient = RedisClient()
-# global spFacades
-# spFacades = {}
+redisClient = FileIoClient(workingDir="./working")
+
 tmFacades = {}
 classifiers = {}
 counts = {}
@@ -49,71 +49,98 @@ class SpRoute:
   def POST(self):
     """
     Creates a new Spatial Pooler with a unique ID.
-    :return:
+
+    No URL params expected.
+
+    POST params:
+
+    states: (string array):  List of the SP states you want back. Active columns
+                             are always sent. Otherwise, you can find a list of
+                             available states in snapshots.py.
+
+    :return: requested state from the sp instance in JSON, keyed by strings in
+             POST "states" param.
     """
-    global spFacades
     requestPayload = json.loads(web.data())
-    params = requestPayload.params
+    params = requestPayload["params"]
+    states = requestPayload["states"]
 
     from pprint import pprint; pprint(params)
-    sp = SP(**params)
-    modelId = str(uuid.uuid4()).split('-')[0]
-
-    redisClient.saveSpatialPooler(self, sp, modelId, -1)
-
-    print "Created SP {}".format(modelId)
+    sp = SpFacade(SP(**params), redisClient)
+    sp.save()
 
     payload = {
-      "meta": {
-        "id": modelId
-      }
+      "id": sp.getId(),
+      "iteration": -1,
+      "state": {}
     }
-
-    initialState = {}
-    initialState[SP_SNAPS.ACT_COL] = sp.getActiveColumns()
-    initialState[SP_SNAPS.POT_POOLS] = sp.getPotentialPools()
+    payload["state"] = sp.getState(*states)
 
     web.header("Content-Type", "application/json")
     return json.dumps(payload)
 
 
   def PUT(self):
+    """
+    Runs a row of binary input into a Spatial Pooler by id. This method should
+    not be used for history extraction, only for running new data.
+
+    No URL params expected.
+
+    POST params:
+
+    id (string):             The model ID you got when you created the SP.
+    encoding (binary array): Semantic encoding of 1s and 0s. No dimensional
+                             checking is done. It is passed as-is into the
+                             spatial pooler.
+    learn ('true'|'false'):  Should the Spatial Pooler mutate permanence values?
+    states: (string array):  List of the SP states you want back. Active columns
+                             are always sent. Otherwise, you can find a list of
+                             available states in snapshots.py.
+
+    :return: id, iteration, and requested state from the sp instance in JSON.
+             States are keyed by strings given in POST "states" param.
+    """
     requestStart = time.time()
-    requestInput = web.input()
-    encoding = web.data()
-    stateSnapshots = [
-      SP_SNAPS.ACT_COL,
-    ]
+    requestPayload = json.loads(web.data())
 
-    for snap in SP_SNAPS.listValues():
-      getString = "get{}{}".format(snap[:1].upper(), snap[1:])
-      if getString in requestInput and requestInput[getString] == "true":
-        stateSnapshots.append(snap)
-
-    if "id" not in requestInput:
-      print "Request must include a model id."
+    if "id" not in requestPayload:
+      print "Request must include a model id for Spatial Pooler retrieval."
+      return web.badrequest()
+    if "encoding" not in requestPayload:
+      print "Request must include an encoding."
       return web.badrequest()
 
-    modelId = requestInput["id"]
+    modelId = requestPayload["id"]
+    encoding = requestPayload["encoding"]
 
-    if modelId not in spFacades.keys():
-      print "Unknown SP id {}!".format(modelId)
-      return web.badrequest()
-
-    sp = spFacades[modelId]
+    requestedStates = []
+    if "states" in requestPayload:
+      requestedStates = requestPayload["states"]
 
     learn = True
-    if "learn" in requestInput:
-      learn = requestInput["learn"] == "true"
+    if "learn" in requestPayload:
+      learn = requestPayload["learn"]
 
-    inputArray = np.array([])
-    if len(encoding):
-      inputArray = np.array([int(bit) for bit in encoding.split(",")])
+    # TODO: check for missing modelId and return bad request.
+
+    sp = SpFacade(modelId, redisClient)
+    iteration = sp.getIteration()
+    inputArray = np.array(encoding)
 
     print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
     sp.compute(inputArray, learn=learn)
 
-    response = sp.getState(*stateSnapshots)
+    # This is important. It is the one and only place that should be ticking
+    # the counter forward (right before saving).
+    iteration += 1
+    sp.save()
+
+    response = {}
+    response["iteration"] = iteration
+    response["id"] = modelId
+    print requestedStates
+    response["state"] = sp.getState(*requestedStates)
 
     web.header("Content-Type", "application/json")
     jsonOut = json.dumps(response)
@@ -349,7 +376,7 @@ class RoyalFlush:
 
 
   def DELETE(self):
-    nupicHistory.nuke()
+    redisClient.nuke()
     return "NuPIC History Server got NUKED!"
 
 

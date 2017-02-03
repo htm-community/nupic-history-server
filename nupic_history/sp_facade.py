@@ -10,35 +10,27 @@ from nupic.math import topology
 
 class SpFacade(object):
 
-  def __init__(self, sp, redisClient, save=None, modelId=None):
+  def __init__(self, sp, redisClient):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
 
-    :param sp: Either an instance of Spatial Pooler or a SP id string
+    :param sp: Either an instance of Spatial Pooler or a string model id
     :param redisClient: Instantiated Redis client
     :param save: list of Snapshots to save with each compute step
     """
     self._redisClient = redisClient
     if isinstance(sp, basestring):
-      self._sp = None
       self._id = sp
-      self._iteration = self._redisClient.getMaxIteration(self._id)
+      self._sp, self._iteration = redisClient.loadSpatialPooler(sp)
     else:
       self._sp = sp
-      if modelId is None:
-        self._id = str(uuid.uuid4()).split('-')[0]
-      else:
-        self._id = modelId
+      self._id = str(uuid.uuid4()).split('-')[0]
       self._iteration = -1
     self._state = None
     self._input = None
     self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
-    self._save = None
-    if save is not None:
-      self._save = save[:]
-    self._adjustSavedSnapshots()
 
 
   def __str__(self):
@@ -47,13 +39,25 @@ class SpFacade(object):
     )
 
 
-  def isActive(self):
-    """
-    Returns True if this facade contains a live spatial pooler. If False, the
-    facade cannot compute(), but can be used for history playback.
-    :return: has active Spatial Pooler
-    """
-    return self._sp is not None
+  def save(self):
+    redis = self._redisClient
+    id = self.getId()
+    iteration = self.getIteration()
+    if self._input:
+      redis.saveEncoding(self._input, id, iteration)
+    if self._sp:
+      redis.saveSpatialPooler(self._sp, id, iteration)
+    if self._activeColumns:
+      redis.saveActiveColumns(self._activeColumns, id, iteration)
+
+
+  def load(self):
+    redis = self._redisClient
+    id = self.getId()
+    iteration = self.getIteration()
+    self._input = redis.loadEncoding(id, iteration)
+    self._activeColumns = redis.loadActiveColumns(id, iteration)
+    self._sp = redis.loadSpatialPooler(id, iteration)
 
 
   def getId(self):
@@ -103,9 +107,8 @@ class SpFacade(object):
         "synPermInactiveDec": sp.getSynPermInactiveDec(),
         "synPermConnected": sp.getSynPermConnected(),
         "minPctOverlapDutyCycle": sp.getMinPctOverlapDutyCycles(),
-        "minPctActiveDutyCycle": sp.getMinPctActiveDutyCycles(),
         "dutyCyclePeriod": sp.getDutyCyclePeriod(),
-        "maxBoost": sp.getMaxBoost(),
+        "boostStrength": sp.getBoostStrength(),
       }
     return params
 
@@ -181,21 +184,19 @@ class SpFacade(object):
     return out
 
 
-  def save(self):
-    """
-    Saves the current state of the SP to Redis.
-    """
-    if self._save is not None and len(self._save) > 0:
-      if not self.isActive():
-        raise RuntimeError("Cannot save an inactive SP Facade.")
-      if self.getInput() is None:
-        raise ValueError(
-          "Cannot save SP state because it has never seen input.")
-      spid = self.getId()
-      params = self.getParams()
-      iteration = self.getIteration()
-      state = self.getState(*self._save)
-      self._redisClient.saveSpState(spid, params, iteration, state)
+  # def save(self):
+  #   """
+  #   Saves the current state of the SP to Redis.
+  #   """
+  #   if self._save is not None and len(self._save) > 0:
+  #     if self.getInput() is None:
+  #       raise ValueError(
+  #         "Cannot save SP state because it has never seen input.")
+  #     spid = self.getId()
+  #     params = self.getParams()
+  #     iteration = self.getIteration()
+  #     state = self.getState(*self._save)
+  #     self._redisClient.saveSpState(spid, params, iteration, state)
 
 
   def delete(self):
@@ -269,141 +270,79 @@ class SpFacade(object):
   # iteration in the past is specified, Redis will be the data source.
 
 
-  def _conjureInput(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      return compressSdr(self._input)
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.INPUT, iteration
-      )
+  def _conjureInput(self, **kwargs):
+    return compressSdr(self._input)
 
 
-  def _conjureActiveColumns(self, iteration=None, columnIndex=None):
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      out = compressSdr(self._activeColumns)
-    else:
-      if columnIndex is None:
-        out = self._redisClient.getLayerStateByIteration(
-          self.getId(), SNAPS.ACT_COL, iteration
-        )
-      else:
-        out = self._redisClient.getActiveColumnsByColumn(
-          self.getId(), columnIndex, self.getIteration() + 1
-        )
-    return out
+  def _conjureActiveColumns(self, **kwargs):
+    return compressSdr(self._activeColumns)
 
 
-  def _conjureOverlaps(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      return self._sp.getOverlaps().tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.OVERLAPS, iteration
-      )
+  def _conjureOverlaps(self, **kwargs):
+    return self._sp.getOverlaps().tolist()
 
 
   def _conjurePotentialPools(self, **kwargs):
-    if self._potentialPools is None:
-      if self.isActive():
-        sp = self._sp
-        self._potentialPools = []
-        for colIndex in range(0, sp.getNumColumns()):
-          potentialPools = []
-          potentialPoolsIndices = []
-          sp.getPotential(colIndex, potentialPools)
-          for i, pool in enumerate(potentialPools):
-            if np.asscalar(pool) == 1.0:
-              potentialPoolsIndices.append(i)
-          self._potentialPools.append(potentialPoolsIndices)
-      else:
-        self._potentialPools = self._redisClient.getPotentialPools(self.getId())
-    return self._potentialPools
-
-
-  def _conjureConnectedSynapses(self, iteration=None, columnIndex=None):
-    columns = []
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      sp = self._sp
-      for colIndex in range(0, sp.getNumColumns()):
-        connectedSynapses = self._getZeroedInput()
-        sp.getConnectedSynapses(colIndex, connectedSynapses)
-        columns.append(np.nonzero(connectedSynapses)[0].tolist())
-    else:
-      # Check the cache for permanences before calling to fetch them.
-      if SNAPS.PERMS in self._state:
-        perms = self._state[SNAPS.PERMS]
-      else:
-        perms = self._conjurePermanences(iteration=iteration, columnIndex=columnIndex)
-      threshold = self.getParams()["synPermConnected"]
-      for columnPerms in perms:
-        colConnections = []
-        for perm in columnPerms:
-          bit = 0
-          if perm > threshold:
-            bit = 1
-          colConnections.append(bit)
-        columns.append(colConnections)
-    return columns
-
-
-  def _conjurePermanences(self, iteration=None, columnIndex=None):
-    out = []
-    numColumns = self.getNumColumns()
     sp = self._sp
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      for colIndex in range(0, numColumns):
-        perms = self._getZeroedInput()
-        sp.getPermanence(colIndex, perms)
-        out.append([round(perm, 2) for perm in perms.tolist()])
-    else:
-      out = self._getStateFor(SNAPS.PERMS, columnIndex, iteration, numColumns, out)
+    out = []
+    for colIndex in range(0, sp.getNumColumns()):
+      columnPool = []
+      columnPoolIndices = []
+      sp.getPotential(colIndex, columnPool)
+      for i, pool in enumerate(columnPool):
+        if np.asscalar(pool) == 1.0:
+          columnPoolIndices.append(i)
+      out.append(columnPoolIndices)
     return out
 
 
-  def _conjureActiveDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      dutyCycles = self._getZeroedColumns()
-      sp.getActiveDutyCycles(dutyCycles)
-      return dutyCycles.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.ACT_DC, iteration
-      )
+  def _conjureConnectedSynapses(self, **kwargs):
+    columns = []
+    sp = self._sp
+    for colIndex in range(0, sp.getNumColumns()):
+      connectedSynapses = self._getZeroedInput()
+      sp.getConnectedSynapses(colIndex, connectedSynapses)
+      columns.append(np.nonzero(connectedSynapses)[0].tolist())
+    return columns
 
 
-  def _conjureBoostFactors(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      boostFactors = self._getZeroedColumns()
-      sp.getBoostFactors(boostFactors)
-      return boostFactors.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.BST_FCTRS, iteration
-      )
-
-
-  def _conjureOverlapDutyCycles(self, iteration=None, **kwargs):
-    if self._retrieveFromAlgorithm(iteration):
-      sp = self._sp
-      dutyCycles = self._getZeroedColumns()
-      sp.getOverlapDutyCycles(dutyCycles)
-      return dutyCycles.tolist()
-    else:
-      return self._redisClient.getLayerStateByIteration(
-        self.getId(), SNAPS.OVP_DC, iteration
-      )
-
-
-  def _conjureInhibitionMasks(self, iteration=None, columnIndex=None):
+  def _conjurePermanences(self, **kwargs):
     out = []
     numColumns = self.getNumColumns()
-    if self._retrieveFromAlgorithm(iteration, columnIndex):
-      for colIndex in range(0, numColumns):
-        out.append(self._getInhibitionMask(colIndex))
-    else:
-      out = self._getStateFor(SNAPS.INH_MASKS, columnIndex, iteration, numColumns, out)
+    sp = self._sp
+    for colIndex in range(0, numColumns):
+      perms = self._getZeroedInput()
+      sp.getPermanence(colIndex, perms)
+      out.append([round(perm, 2) for perm in perms.tolist()])
+    return out
+
+
+  def _conjureActiveDutyCycles(self, **kwargs):
+    sp = self._sp
+    dutyCycles = self._getZeroedColumns()
+    sp.getActiveDutyCycles(dutyCycles)
+    return dutyCycles.tolist()
+
+
+  def _conjureBoostFactors(self, **kwargs):
+    sp = self._sp
+    boostFactors = self._getZeroedColumns()
+    sp.getBoostFactors(boostFactors)
+    return boostFactors.tolist()
+
+
+  def _conjureOverlapDutyCycles(self, **kwargs):
+    sp = self._sp
+    dutyCycles = self._getZeroedColumns()
+    sp.getOverlapDutyCycles(dutyCycles)
+    return dutyCycles.tolist()
+
+
+  def _conjureInhibitionMasks(self, **kwargs):
+    out = []
+    numColumns = self.getNumColumns()
+    for colIndex in range(0, numColumns):
+      out.append(self._getInhibitionMask(colIndex))
     return out
 
 
