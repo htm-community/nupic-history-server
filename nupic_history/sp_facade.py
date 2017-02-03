@@ -103,9 +103,8 @@ class SpFacade(object):
         "synPermInactiveDec": sp.getSynPermInactiveDec(),
         "synPermConnected": sp.getSynPermConnected(),
         "minPctOverlapDutyCycle": sp.getMinPctOverlapDutyCycles(),
-        "minPctActiveDutyCycle": sp.getMinPctActiveDutyCycles(),
         "dutyCyclePeriod": sp.getDutyCyclePeriod(),
-        "maxBoost": sp.getMaxBoost(),
+        "boostStrength": sp.getBoostStrength(),
       }
     return params
 
