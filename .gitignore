@@ -1,3 +1,6 @@
+# working dir
+.working/
+
 # IDE
 .idea/
 

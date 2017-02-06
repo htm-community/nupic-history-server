@@ -4,10 +4,6 @@ import time
 import json
 
 import capnp
-import redis
-
-from nupic_history import SpSnapshots as SP_SNAPS
-from nupic_history import TmSnapshots as TM_SNAPS
 
 from nupic.proto import SpatialPoolerProto_capnp
 from nupic.research.spatial_pooler import SpatialPooler
@@ -89,7 +85,7 @@ class FileIoClient(object):
     self._writePrototype(key, proto)
 
     end = time.time() * 1000
-    print "{} SP storage into {} took {} ms".format(
+    print "{} SP serialization into {} took {} ms".format(
       id, key, (end - start)
     )
 
@@ -111,6 +107,29 @@ class FileIoClient(object):
       id, key, (end - start)
     )
     return sp, iteration
+
+
+  def loadEncoding(self, id, iteration):
+    start = time.time() * 1000
+    key = self.ENCODING.format(id, iteration)
+    encoding = self._readData(key)
+    size = sys.getsizeof(encoding)
+    end = time.time() * 1000
+    print "{} input de-serialization of {} bytes into {} took {} ms".format(
+      id, size, key, (end - start)
+    )
+    return encoding
+
+
+  def loadActiveColumns(self, id, iteration):
+    start = time.time() * 1000
+    key = self.SP_ACT_COL.format(id, iteration)
+    activeColumns = self._readData(key)
+    size = sys.getsizeof(activeColumns)
+    end = time.time() * 1000
+    print "{} activeColumns de-serialization of {} bytes into {} took {} ms".format(
+      id, size, key, (end - start)
+    )
 
 
   def getMaxIteration(self, modelId):

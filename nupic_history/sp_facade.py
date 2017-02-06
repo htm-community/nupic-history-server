@@ -10,26 +10,28 @@ from nupic.math import topology
 
 class SpFacade(object):
 
-  def __init__(self, sp, redisClient):
+  def __init__(self, sp, ioClient, iteration=-1):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
 
     :param sp: Either an instance of Spatial Pooler or a string model id
-    :param redisClient: Instantiated Redis client
+    :param ioClient: Instantiated IO client
     :param save: list of Snapshots to save with each compute step
     """
-    self._redisClient = redisClient
+    self._ioClient = ioClient
     if isinstance(sp, basestring):
+      # Loading SP by id from IO.
       self._id = sp
-      self._sp, self._iteration = redisClient.loadSpatialPooler(sp)
+      self.load(iteration)
     else:
+      # New facade using given fresh SP.
       self._sp = sp
       self._id = str(uuid.uuid4()).split('-')[0]
-      self._iteration = -1
+      self._input = self._getZeroedInput().tolist()
+      self._activeColumns = self._getZeroedColumns().tolist()
+      self._iteration = iteration
     self._state = None
-    self._input = None
-    self._activeColumns = self._getZeroedColumns().tolist()
     self._potentialPools = None
 
 
@@ -40,24 +42,26 @@ class SpFacade(object):
 
 
   def save(self):
-    redis = self._redisClient
+    ioClient = self._ioClient
     id = self.getId()
     iteration = self.getIteration()
-    if self._input:
-      redis.saveEncoding(self._input, id, iteration)
-    if self._sp:
-      redis.saveSpatialPooler(self._sp, id, iteration)
-    if self._activeColumns:
-      redis.saveActiveColumns(self._activeColumns, id, iteration)
+    ioClient.saveEncoding(self._input, id, iteration)
+    ioClient.saveActiveColumns(self._activeColumns, id, iteration)
+    ioClient.saveSpatialPooler(self._sp, id, iteration)
 
 
-  def load(self):
-    redis = self._redisClient
+  def load(self, iteration=-1):
+    ioClient = self._ioClient
     id = self.getId()
-    iteration = self.getIteration()
-    self._input = redis.loadEncoding(id, iteration)
-    self._activeColumns = redis.loadActiveColumns(id, iteration)
-    self._sp = redis.loadSpatialPooler(id, iteration)
+    self._sp, self._iteration = ioClient.loadSpatialPooler(
+      id, iteration=iteration
+    )
+    if iteration < 0:
+      self._input = self._getZeroedInput()
+      self._activeColumns = self._getZeroedColumns()
+    else:
+      self._input = ioClient.loadEncoding(id, iteration)
+      self._activeColumns = ioClient.loadActiveColumns(id, iteration)
 
 
   def getId(self):
@@ -70,9 +74,7 @@ class SpFacade(object):
 
   def getIteration(self):
     """
-    Represents the current iteration of data the SP has seen. If this facade is
-    not active, this also will be the last data point it saw before being
-    deactivated.
+    Represents the current iteration of data the SP has seen.
     :return: int
     """
     return self._iteration
@@ -92,7 +94,7 @@ class SpFacade(object):
     """
     sp = self._sp
     if sp is None:
-      params =self._redisClient.getSpParams(self.getId())
+      params =self._ioClient.getSpParams(self.getId())
     else:
       params = {
         "numInputs": sp.getNumInputs(),
@@ -113,7 +115,7 @@ class SpFacade(object):
     return params
 
 
-  def compute(self, encoding, learn=False, multiprocess=True):
+  def compute(self, encoding, learn=False, save=False, multiprocess=False):
     """
     Pass-through to Spatial Pooler's compute() function, with the addition of
     the save option.
@@ -126,11 +128,14 @@ class SpFacade(object):
     self._input = encoding.tolist()
     self._activeColumns = columns.tolist()
     self._advance()
-    if multiprocess:
-      p = multiprocessing.Process(target=self.save)
-      p.start()
-    else:
-      self.save()
+    if save:
+      if multiprocess:
+        p = multiprocessing.Process(target=self.save)
+        p.start()
+        print "** returning after threaded save"
+      else:
+        self.save()
+        print "** returning after single thread save"
 
 
   def getState(self, *args, **kwargs):
@@ -196,14 +201,14 @@ class SpFacade(object):
   #     params = self.getParams()
   #     iteration = self.getIteration()
   #     state = self.getState(*self._save)
-  #     self._redisClient.saveSpState(spid, params, iteration, state)
+  #     self._ioClient.saveSpState(spid, params, iteration, state)
 
 
   def delete(self):
     """
     Deletes all traces of this SP instance from Redis.
     """
-    self._redisClient.delete(self.getId())
+    self._ioClient.delete(self.getId())
 
 
   def getNumColumns(self):
@@ -348,11 +353,11 @@ class SpFacade(object):
 
   def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
     if columnIndex is None:
-      out = self._redisClient.getStateByIteration(
+      out = self._ioClient.getStateByIteration(
         self.getId(), snap, iteration, numColumns
       )
     else:
-      out = self._redisClient.getStatebyColumn(
+      out = self._ioClient.getStatebyColumn(
         self.getId(), snap, columnIndex, self.getIteration() + 1
       )
     return out

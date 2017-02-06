@@ -10,18 +10,18 @@ from nupic.research.temporal_memory import TemporalMemory as TM
 
 from nupic_history import NupicHistory
 from nupic_history import SpSnapshots as SP_SNAPS
-from nupic_history.redis_client import FileIoClient
+from nupic_history.io_client import FileIoClient
 from nupic_history.sp_facade import SpFacade
 from nupic_history import TmSnapshots as TM_SNAPS
 from nupic.algorithms.sdr_classifier_factory import SDRClassifierFactory
 
 
-redisClient = FileIoClient(workingDir="./working")
-
-tmFacades = {}
-classifiers = {}
-counts = {}
-nupicHistory = NupicHistory()
+ioClient = FileIoClient(workingDir="./working")
+modelCache = {}
+# tmFacades = {}
+# classifiers = {}
+# counts = {}
+nupicHistory = NupicHistory(ioClient)
 
 urls = (
   "/", "Index",
@@ -61,13 +61,25 @@ class SpRoute:
     :return: requested state from the sp instance in JSON, keyed by strings in
              POST "states" param.
     """
+    global modelCache
     requestPayload = json.loads(web.data())
     params = requestPayload["params"]
     states = requestPayload["states"]
+    save = requestPayload["save"]
 
     from pprint import pprint; pprint(params)
-    sp = SpFacade(SP(**params), redisClient)
-    sp.save()
+    sp = SpFacade(SP(**params), ioClient)
+
+    modelId = sp.getId()
+
+    if save:
+      print "Saving SP {} to disk...".format(modelId)
+      sp.save()
+    else:
+      print "Saving SP {} to memory...".format(modelId)
+      modelCache[modelId] = {
+        "sp": sp
+      }
 
     payload = {
       "id": sp.getId(),
@@ -122,24 +134,34 @@ class SpRoute:
     if "learn" in requestPayload:
       learn = requestPayload["learn"]
 
-    # TODO: check for missing modelId and return bad request.
+    if modelId in modelCache.keys():
+      print "Fetching SP {} from memory...".format(modelId)
+      sp = modelCache[modelId]["sp"]
+      save = False
+    else:
+      # try:
+      print "Fetching SP {} from disk...".format(modelId)
+      sp = SpFacade(modelId, ioClient)
+      save = True
+      # except Exception as err:
+      #   print err
+      #   print "Unknown model id: {}".format(modelId)
+      #   return web.badrequest()
 
-    sp = SpFacade(modelId, redisClient)
     iteration = sp.getIteration()
     inputArray = np.array(encoding)
 
-    print "Entering SP {} compute cycle | Learning: {}".format(modelId, learn)
-    sp.compute(inputArray, learn=learn)
+    print "Entering SP {} compute cycle | Learning: {} | Saving: {}"\
+      .format(modelId, learn, save)
+    sp.compute(inputArray, learn=learn, save=save)
 
     # This is important. It is the one and only place that should be ticking
     # the counter forward (right before saving).
     iteration += 1
-    sp.save()
 
     response = {}
     response["iteration"] = iteration
     response["id"] = modelId
-    print requestedStates
     response["state"] = sp.getState(*requestedStates)
 
     web.header("Content-Type", "application/json")
@@ -152,20 +174,32 @@ class SpRoute:
 
 
 
-# class SpHistoryRoute:
-#
-#   def GET(self, modelId, columnIndex):
-#     """
-#     Returns entire history of SP for given column
-#     """
-#     sp = spFacades[modelId]
-#     history = sp.getState(
-#       SP_SNAPS.PERMS, SP_SNAPS.ACT_COL, columnIndex=int(columnIndex)
-#     )
-#     return json.dumps(history)
-#
-#
-#
+class SpHistoryRoute:
+
+  def GET(self, modelId, columnIndex):
+    """
+    Returns entire history of SP for given column
+    """
+    requestInput = web.input()
+    states = requestInput["states"].split(',')
+
+    if modelId in modelCache.keys():
+      print "Fetching SP {} from memory...".format(modelId)
+      sp = modelCache[modelId]["sp"]
+    else:
+      try:
+        print "Fetching SP {} from disk...".format(modelId)
+        sp = SpFacade(modelId, ioClient)
+      except:
+        print "Unknown model id: {}".format(modelId)
+        return web.badrequest()
+
+    history = nupicHistory.getColumnHistory(modelId, int(columnIndex), states)
+
+    return json.dumps(history)
+
+
+
 # class TmRoute:
 #
 #
@@ -376,7 +410,7 @@ class RoyalFlush:
 
 
   def DELETE(self):
-    redisClient.nuke()
+    ioClient.nuke()
     return "NuPIC History Server got NUKED!"
 
 

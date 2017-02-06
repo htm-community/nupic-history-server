@@ -235,7 +235,7 @@ class TmFacade(object):
     else:
       raise Exception('REDIS storage of active segments is not implemented');
       # print "** getting active segments from Redis"
-      # out = self._redisClient.getLayerStateByIteration(
+      # out = self._ioClient.getLayerStateByIteration(
       #   self.getId(), SNAPS.ACT_SEGS, iteration
       # )
     return out

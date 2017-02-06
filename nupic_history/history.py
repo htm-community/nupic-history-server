@@ -1,28 +1,16 @@
 from nupic_history.sp_facade import SpFacade
 from nupic_history.tm_facade import TmFacade
-from nupic_history.redis_client import FileIoClient
+from nupic_history.io_client import FileIoClient
 
 
 class NupicHistory(object):
 
 
-  def __init__(self):
+  def __init__(self, ioClient):
     """
     Provides top-level control over the SP History Facades.
     """
-    # TODO: Provide way for user to specific Redis connection details.
-    self._redisClient = FileIoClient()
-
-
-  def list(self):
-    """
-    Gets all the SpFacades that have history in Redis.
-    :return: [SpFacade[]]
-    """
-    return [
-      SpFacade(spid, self._redisClient)
-      for spid in self._redisClient.listSpIds()
-    ]
+    self._ioClient = ioClient
 
 
   def createSpFacade(self, sp, save=None, modelId=None):
@@ -34,7 +22,7 @@ class NupicHistory(object):
     :param save: list of Snapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
-    return SpFacade(sp, self._redisClient, save=save, modelId=modelId)
+    return SpFacade(sp, self._ioClient, save=save, modelId=modelId)
 
 
   def getSpFacade(self, spId):
@@ -44,7 +32,7 @@ class NupicHistory(object):
     :param spId:
     :return: [SpFacade]
     """
-    return SpFacade(spId, self._redisClient)
+    return SpFacade(spId, self._ioClient)
 
 
   def createTmFacade(self, tm, save=None, modelId=None):
@@ -56,7 +44,7 @@ class NupicHistory(object):
     :param save: list of Snapshots to save with each compute step
     :return: [SpFacade] complete with a default redis client
     """
-    return TmFacade(tm, self._redisClient, save=save, modelId=modelId)
+    return TmFacade(tm, self._ioClient, save=save, modelId=modelId)
 
 
   def getTmFacade(self, tmId):
@@ -66,7 +54,21 @@ class NupicHistory(object):
     :param tmId:
     :return: [TmFacade]
     """
-    return TmFacade(tmId, self._redisClient)
+    return TmFacade(tmId, self._ioClient)
+
+
+  def getColumnHistory(self, spId, columnIndex, states):
+    out = {}
+    for state in states:
+      out[state] = []
+
+    for iteration in xrange(self._ioClient.getMaxIteration(spId)):
+      # sp, iter = self._ioClient.loadSpatialPooler(spId, iteration=iteration)
+      # assert iter == iteration
+      spFacade = SpFacade(spId, self._ioClient, iteration=iteration)
+      for state in states:
+        out[state].append(spFacade.getState(state, columnIndex=columnIndex))
+    return out
 
 
   def nuke(self):
@@ -74,4 +76,4 @@ class NupicHistory(object):
     Removes all traces of NuPIC History from Redis.
     :return:
     """
-    self._redisClient.nuke(flush=True)
+    self._ioClient.nuke(flush=True)
