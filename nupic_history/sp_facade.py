@@ -10,7 +10,7 @@ from nupic.math import topology
 
 class SpFacade(object):
 
-  def __init__(self, sp, ioClient, iteration=-1):
+  def __init__(self, sp, ioClient, iteration=None):
     """
     A wrapper around the HTM Spatial Pooler that can save SP state to Redis for
     each compute cycle. Adds a "save=" kwarg to compute().
@@ -29,8 +29,8 @@ class SpFacade(object):
       self._sp = sp
       self._id = str(uuid.uuid4()).split('-')[0]
       self._input = self._getZeroedInput().tolist()
-      self._activeColumns = self._getZeroedColumns().tolist()
-      self._iteration = iteration
+      self._activeColumns = np.asarray(self._getZeroedColumns(), dtype="uint32")
+      self._iteration = sp.getIterationNum()
     self._state = None
     self._potentialPools = None
 
@@ -50,12 +50,15 @@ class SpFacade(object):
     ioClient.saveSpatialPooler(self._sp, id, iteration)
 
 
-  def load(self, iteration=-1):
+  def load(self, iteration=None):
     ioClient = self._ioClient
     id = self.getId()
-    self._sp, self._iteration = ioClient.loadSpatialPooler(
+    if iteration is None:
+      iteration = ioClient.getMaxIteration(id)
+    self._sp = ioClient.loadSpatialPooler(
       id, iteration=iteration
     )
+    iteration = self.getIteration()
     if iteration < 0:
       self._input = self._getZeroedInput()
       self._activeColumns = self._getZeroedColumns()
@@ -77,7 +80,7 @@ class SpFacade(object):
     Represents the current iteration of data the SP has seen.
     :return: int
     """
-    return self._iteration
+    return self._sp.getIterationNum()
 
 
   def getInput(self):
@@ -99,7 +102,7 @@ class SpFacade(object):
       params = {
         "numInputs": sp.getNumInputs(),
         "numColumns": sp.getNumColumns(),
-        "columnDimensions": sp.getColumnDimensions().tolist(),
+        "columnDimensions": np.asarray(sp.getColumnDimensions()),
         "numActiveColumnsPerInhArea": sp.getNumActiveColumnsPerInhArea(),
         "potentialPct": sp.getPotentialPct(),
         "globalInhibition": sp.getGlobalInhibition(),
@@ -125,17 +128,15 @@ class SpFacade(object):
     sp = self._sp
     columns = np.zeros(sp.getNumColumns(), dtype="uint32")
     sp.compute(encoding, learn, columns)
-    self._input = encoding.tolist()
-    self._activeColumns = columns.tolist()
-    self._advance()
+    self._input = encoding
+    self._activeColumns = columns
+    self._state = None
     if save:
       if multiprocess:
         p = multiprocessing.Process(target=self.save)
         p.start()
-        print "** returning after threaded save"
       else:
         self.save()
-        print "** returning after single thread save"
 
 
   def getState(self, *args, **kwargs):
@@ -170,9 +171,6 @@ class SpFacade(object):
     :param kwargs:
     :return:
     """
-    iteration = None
-    if "iteration" in kwargs:
-      iteration = kwargs["iteration"]
     columnIndex = None
     if "columnIndex" in kwargs:
       columnIndex = kwargs["columnIndex"]
@@ -184,7 +182,7 @@ class SpFacade(object):
       if not SNAPS.contains(snap):
         raise ValueError("{} is not available in SP History.".format(snap))
       out[snap] = self._getSnapshot(
-        snap, iteration=iteration, columnIndex=columnIndex
+        snap, iteration=self.getIteration(), columnIndex=columnIndex
       )
     return out
 
@@ -231,16 +229,11 @@ class SpFacade(object):
 
 
 
-  def _advance(self):
-    self._state = None
-    self._iteration += 1
-
-
-  def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
-    return self.isActive() \
-           and (
-             (iteration is None and columnIndex is None)
-             or iteration == self.getIteration())
+  # def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
+  #   return self.isActive() \
+  #          and (
+  #            (iteration is None and columnIndex is None)
+  #            or iteration == self.getIteration())
 
 
   def _getZeroedColumns(self):
@@ -259,6 +252,7 @@ class SpFacade(object):
       return self._state[name]
     else:
       funcName = "_conjure{}".format(name[:1].upper() + name[1:])
+      # print "\t\t\t{}".format(funcName)
       func = getattr(self, funcName)
       result = func(iteration=iteration, columnIndex=columnIndex)
       self._state[name] = result
@@ -291,7 +285,7 @@ class SpFacade(object):
     sp = self._sp
     out = []
     for colIndex in range(0, sp.getNumColumns()):
-      columnPool = []
+      columnPool = np.asarray(self._getZeroedInput(), dtype="uint32")
       columnPoolIndices = []
       sp.getPotential(colIndex, columnPool)
       for i, pool in enumerate(columnPool):
@@ -351,16 +345,16 @@ class SpFacade(object):
     return out
 
 
-  def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
-    if columnIndex is None:
-      out = self._ioClient.getStateByIteration(
-        self.getId(), snap, iteration, numColumns
-      )
-    else:
-      out = self._ioClient.getStatebyColumn(
-        self.getId(), snap, columnIndex, self.getIteration() + 1
-      )
-    return out
+  # def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
+  #   if columnIndex is None:
+  #     out = self._ioClient.getStateByIteration(
+  #       self.getId(), snap, iteration, numColumns
+  #     )
+  #   else:
+  #     out = self._ioClient.getStatebyColumn(
+  #       self.getId(), snap, columnIndex, self.getIteration() + 1
+  #     )
+  #   return out
 
 
   def _getInhibitionMask(self, colIndex):

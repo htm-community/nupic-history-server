@@ -2,11 +2,12 @@ import sys
 import os
 import time
 import json
+import pickle
 
 import capnp
 
 from nupic.proto import SpatialPoolerProto_capnp
-from nupic.research.spatial_pooler import SpatialPooler
+from nupic.bindings.algorithms import SpatialPooler
 
 
 class FileIoClient(object):
@@ -34,13 +35,13 @@ class FileIoClient(object):
   def _writeData(self, key, data):
     path = self._workingDir + "/" + key
     with open(path, "w") as fileout:
-      fileout.write(json.dumps(data))
+      pickle.dump(data, fileout)
 
 
   def _readData(self, key):
     path = self._workingDir + "/" + key
     with open(path, "r") as f:
-      return json.loads(f.read())
+      return pickle.load(f)
 
 
   def _writePrototype(self, key, proto):
@@ -106,7 +107,7 @@ class FileIoClient(object):
     print "{} SP de-serialization from {} took {} ms".format(
       id, key, (end - start)
     )
-    return sp, iteration
+    return sp
 
 
   def loadEncoding(self, id, iteration):
@@ -133,7 +134,7 @@ class FileIoClient(object):
 
 
   def getMaxIteration(self, modelId):
-    maxIteration = -1
+    maxIteration = 0
     # We will use active columns keys to find the max iteration.
     keys = os.listdir(self._workingDir)
     if len(keys) > 0:

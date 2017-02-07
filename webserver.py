@@ -5,8 +5,8 @@ import uuid
 import numpy as np
 import web
 
-from nupic.research.spatial_pooler import SpatialPooler as SP
-from nupic.research.temporal_memory import TemporalMemory as TM
+from nupic.bindings.algorithms import SpatialPooler as SP
+# from nupic.bindings.algorithms import TemporalMemory as TM
 
 from nupic_history import NupicHistory
 from nupic_history import SpSnapshots as SP_SNAPS
@@ -18,9 +18,6 @@ from nupic.algorithms.sdr_classifier_factory import SDRClassifierFactory
 
 ioClient = FileIoClient(workingDir="./working")
 modelCache = {}
-# tmFacades = {}
-# classifiers = {}
-# counts = {}
 nupicHistory = NupicHistory(ioClient)
 
 urls = (
@@ -62,6 +59,7 @@ class SpRoute:
              POST "states" param.
     """
     global modelCache
+    print web.data()
     requestPayload = json.loads(web.data())
     params = requestPayload["params"]
     states = requestPayload["states"]
@@ -75,11 +73,14 @@ class SpRoute:
     if save:
       print "Saving SP {} to disk...".format(modelId)
       sp.save()
-    else:
-      print "Saving SP {} to memory...".format(modelId)
-      modelCache[modelId] = {
-        "sp": sp
-      }
+
+    print "Saving SP {} to memory...".format(modelId)
+    modelCache[modelId] = {
+      "sp": sp,
+      "save": save,
+    }
+
+    print "Packing response payload..."
 
     payload = {
       "id": sp.getId(),
@@ -130,14 +131,14 @@ class SpRoute:
     if "states" in requestPayload:
       requestedStates = requestPayload["states"]
 
-    learn = True
-    if "learn" in requestPayload:
-      learn = requestPayload["learn"]
+    learn = False
+    if "learn" in requestPayload and requestPayload["learn"] == "true":
+      learn = True
 
     if modelId in modelCache.keys():
       print "Fetching SP {} from memory...".format(modelId)
       sp = modelCache[modelId]["sp"]
-      save = False
+      save = modelCache[modelId]["save"]
     else:
       # try:
       print "Fetching SP {} from disk...".format(modelId)
@@ -149,15 +150,11 @@ class SpRoute:
       #   return web.badrequest()
 
     iteration = sp.getIteration()
-    inputArray = np.array(encoding)
+    inputArray = np.asarray(encoding, dtype="uint32")
 
-    print "Entering SP {} compute cycle | Learning: {} | Saving: {}"\
-      .format(modelId, learn, save)
-    sp.compute(inputArray, learn=learn, save=save)
-
-    # This is important. It is the one and only place that should be ticking
-    # the counter forward (right before saving).
-    iteration += 1
+    print "Entering SP {} compute cycle iteration {} (Learn: {} Save: {})"\
+      .format(modelId, iteration, learn, save)
+    sp.compute(inputArray, learn=learn, save=save, multiprocess=True)
 
     response = {}
     response["iteration"] = iteration
