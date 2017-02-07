@@ -317,10 +317,11 @@ class SpFacade(object):
     out = []
     numColumns = self.getNumColumns()
     sp = self._sp
+    zeros = self._getZeroedInput()
     for colIndex in range(0, numColumns):
-      perms = self._getZeroedInput()
+      perms = zeros.copy()
       sp.getPermanence(colIndex, perms)
-      out.append([round(perm, 2) for perm in perms.tolist()])
+      out.append(np.round(perms, decimals=2).tolist())
     return out
 
 
