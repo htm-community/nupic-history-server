@@ -56,7 +56,7 @@ class FileIoClient(object):
     key = self.ENCODING.format(id, iteration)
     self._writeData(key, encoding)
     end = time.time() * 1000
-    print "{} input serialization of {} bytes into {} took {} ms".format(
+    print "\t{} input serialization of {} bytes into {} took {} ms".format(
       id, size, key, (end - start)
     )
 
@@ -67,7 +67,7 @@ class FileIoClient(object):
     key = self.SP_ACT_COL.format(id, iteration)
     self._writeData(key, activeColumns)
     end = time.time() * 1000
-    print "{} activeColumns serialization of {} bytes into {} took {} ms".format(
+    print "\t{} activeColumns serialization of {} bytes into {} took {} ms".format(
       id, size, key, (end - start)
     )
 
@@ -86,7 +86,7 @@ class FileIoClient(object):
     self._writePrototype(key, proto)
 
     end = time.time() * 1000
-    print "{} SP serialization into {} took {} ms".format(
+    print "\t{} SP serialization into {} took {} ms".format(
       id, key, (end - start)
     )
 
@@ -104,7 +104,7 @@ class FileIoClient(object):
     sp = SpatialPooler.read(proto)
 
     end = time.time() * 1000
-    print "{} SP de-serialization from {} took {} ms".format(
+    print "\t{} SP de-serialization from {} took {} ms".format(
       id, key, (end - start)
     )
     return sp
@@ -116,7 +116,7 @@ class FileIoClient(object):
     encoding = self._readData(key)
     size = sys.getsizeof(encoding)
     end = time.time() * 1000
-    print "{} input de-serialization of {} bytes into {} took {} ms".format(
+    print "\t{} input de-serialization of {} bytes into {} took {} ms".format(
       id, size, key, (end - start)
     )
     return encoding
@@ -128,7 +128,7 @@ class FileIoClient(object):
     activeColumns = self._readData(key)
     size = sys.getsizeof(activeColumns)
     end = time.time() * 1000
-    print "{} activeColumns de-serialization of {} bytes into {} took {} ms".format(
+    print "\t{} activeColumns de-serialization of {} bytes into {} took {} ms".format(
       id, size, key, (end - start)
     )
 

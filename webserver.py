@@ -71,16 +71,14 @@ class SpRoute:
     modelId = sp.getId()
 
     if save:
-      print "Saving SP {} to disk...".format(modelId)
+      print "\tSaving SP {} to disk...".format(modelId)
       sp.save()
 
-    print "Saving SP {} to memory...".format(modelId)
+    print "\tSaving SP {} to memory...".format(modelId)
     modelCache[modelId] = {
       "sp": sp,
       "save": save,
     }
-
-    print "Packing response payload..."
 
     payload = {
       "id": sp.getId(),
@@ -136,12 +134,12 @@ class SpRoute:
       learn = True
 
     if modelId in modelCache.keys():
-      print "Fetching SP {} from memory...".format(modelId)
+      print "\tFetching SP {} from memory...".format(modelId)
       sp = modelCache[modelId]["sp"]
       save = modelCache[modelId]["save"]
     else:
       # try:
-      print "Fetching SP {} from disk...".format(modelId)
+      print "\tFetching SP {} from disk...".format(modelId)
       sp = SpFacade(modelId, ioClient)
       save = True
       # except Exception as err:
@@ -152,7 +150,7 @@ class SpRoute:
     iteration = sp.getIteration()
     inputArray = np.asarray(encoding, dtype="uint32")
 
-    print "Entering SP {} compute cycle iteration {} (Learn: {} Save: {})"\
+    print "\tEntering SP {} compute cycle iteration {} (Learn: {} Save: {})"\
       .format(modelId, iteration, learn, save)
     sp.compute(inputArray, learn=learn, save=save, multiprocess=True)
 
