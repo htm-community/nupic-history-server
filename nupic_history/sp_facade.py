@@ -127,7 +127,7 @@ class SpFacade(object):
     :param learn: whether sp will learn on this compute cycle
     """
     sp = self._sp
-    columns = np.zeros(sp.getNumColumns(), dtype="uint32")
+    columns = np.zeros(sp.getNumColumns())
 
     start = time.time()
     sp.compute(encoding, learn, columns)
@@ -249,7 +249,7 @@ class SpFacade(object):
 
   def _getZeroedInput(self):
     numInputs = self.getParams()["numInputs"]
-    return np.zeros(shape=(numInputs,), dtype="uint32")
+    return np.zeros(shape=(numInputs,))
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):
@@ -306,8 +306,9 @@ class SpFacade(object):
   def _conjureConnectedSynapses(self, **kwargs):
     columns = []
     sp = self._sp
+    zeros = self._getZeroedInput()
     for colIndex in range(0, sp.getNumColumns()):
-      connectedSynapses = self._getZeroedInput()
+      connectedSynapses = zeros.copy()
       sp.getConnectedSynapses(colIndex, connectedSynapses)
       columns.append(np.nonzero(connectedSynapses)[0].tolist())
     return columns
@@ -321,7 +322,8 @@ class SpFacade(object):
     for colIndex in range(0, numColumns):
       perms = zeros.copy()
       sp.getPermanence(colIndex, perms)
-      out.append(np.round(perms, decimals=2).tolist())
+      print "For column {} avg perm is {}".format(colIndex, np.average(perms))
+      out.append(np.around(perms, decimals=2).tolist())
     return out
 
 

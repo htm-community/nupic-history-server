@@ -6,8 +6,14 @@ import pickle
 
 import capnp
 
+cpp = False
+
+if cpp:
+  from nupic.bindings.algorithms import SpatialPooler
+else:
+  from nupic.research.spatial_pooler import SpatialPooler
+
 from nupic.proto import SpatialPoolerProto_capnp
-from nupic.bindings.algorithms import SpatialPooler
 
 
 class FileIoClient(object):

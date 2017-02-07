@@ -5,7 +5,13 @@ import uuid
 import numpy as np
 import web
 
-from nupic.bindings.algorithms import SpatialPooler as SP
+cpp = False
+
+if cpp:
+  from nupic.bindings.algorithms import SpatialPooler as SP
+else:
+  from nupic.research.spatial_pooler import SpatialPooler as SP
+
 # from nupic.bindings.algorithms import TemporalMemory as TM
 
 from nupic_history import NupicHistory
@@ -70,6 +76,13 @@ class SpRoute:
 
     modelId = sp.getId()
 
+    payload = {
+      "id": modelId,
+      "iteration": -1,
+      "state": {}
+    }
+    payload["state"] = sp.getState(*states)
+
     if save:
       print "\tSaving SP {} to disk...".format(modelId)
       sp.save()
@@ -79,13 +92,6 @@ class SpRoute:
       "sp": sp,
       "save": save,
     }
-
-    payload = {
-      "id": sp.getId(),
-      "iteration": -1,
-      "state": {}
-    }
-    payload["state"] = sp.getState(*states)
 
     web.header("Content-Type", "application/json")
     return json.dumps(payload)
