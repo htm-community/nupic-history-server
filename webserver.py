@@ -5,7 +5,7 @@ import uuid
 import numpy as np
 import web
 
-cpp = False
+cpp = True
 
 if cpp:
   from nupic.bindings.algorithms import SpatialPooler as SP

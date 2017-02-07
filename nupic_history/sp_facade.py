@@ -246,15 +246,15 @@ class SpFacade(object):
   def _getZeroedColumns(self):
     numCols = self.getParams()["numColumns"]
     zeros = np.zeros(shape=(numCols,))
-    return zeros
-    # return np.asarray(zeros, dtype="uint32")
+    # return zeros
+    return np.asarray(zeros, dtype="uint32")
 
 
   def _getZeroedInput(self):
     numInputs = self.getParams()["numInputs"]
     zeros = np.zeros(shape=(numInputs,))
-    return zeros
-    # return np.asarray(zeros, dtype="uint32")
+    # return zeros
+    return np.asarray(zeros, dtype="uint32")
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):

@@ -6,7 +6,7 @@ import pickle
 
 import capnp
 
-cpp = False
+cpp = True
 
 if cpp:
   from nupic.bindings.algorithms import SpatialPooler
