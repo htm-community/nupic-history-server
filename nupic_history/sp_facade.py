@@ -37,6 +37,7 @@ class SpFacade(object):
       self._iteration = sp.getIterationNum()
     self._state = None
     self._potentialPools = None
+    self._inhibitionMasks = None
 
 
   def __str__(self):
@@ -302,6 +303,9 @@ class SpFacade(object):
 
 
   def _conjurePotentialPools(self, **kwargs):
+    # These only need to be fetched from the SP once.
+    if self._potentialPools:
+      return self._potentialPools
     sp = self._sp
     out = []
     for colIndex in range(0, sp.getNumColumns()):
@@ -312,6 +316,7 @@ class SpFacade(object):
         if np.asscalar(pool) == 1.0:
           columnPoolIndices.append(i)
       out.append(columnPoolIndices)
+    self._potentialPools = out
     return out
 
 
@@ -340,14 +345,14 @@ class SpFacade(object):
 
   def _conjureActiveDutyCycles(self, **kwargs):
     sp = self._sp
-    dutyCycles = self._getZeroedColumns()
+    dutyCycles = self._getZeroedColumns(dtype="float32")
     sp.getActiveDutyCycles(dutyCycles)
     return dutyCycles.tolist()
 
 
   def _conjureBoostFactors(self, **kwargs):
     sp = self._sp
-    boostFactors = self._getZeroedColumns()
+    boostFactors = self._getZeroedColumns(dtype="float32")
     sp.getBoostFactors(boostFactors)
     return boostFactors.tolist()
 
@@ -360,29 +365,20 @@ class SpFacade(object):
 
 
   def _conjureInhibitionMasks(self, **kwargs):
+    # These only need to be fetched from the SP once.
+    if self._inhibitionMasks:
+      return self._inhibitionMasks
     out = []
     numColumns = self.getNumColumns()
-    for colIndex in range(0, numColumns):
+    for colIndex in xrange(numColumns):
       out.append(self._getInhibitionMask(colIndex))
+    self._inhibitionMasks = out
     return out
-
-
-  # def _getStateFor(self, snap, columnIndex, iteration, numColumns, out):
-  #   if columnIndex is None:
-  #     out = self._ioClient.getStateByIteration(
-  #       self.getId(), snap, iteration, numColumns
-  #     )
-  #   else:
-  #     out = self._ioClient.getStatebyColumn(
-  #       self.getId(), snap, columnIndex, self.getIteration() + 1
-  #     )
-  #   return out
 
 
   def _getInhibitionMask(self, colIndex):
     sp = self._sp
-    maskNeighbors = topology.neighborhood(
-      colIndex, sp._inhibitionRadius, sp._columnDimensions
+    return topology.neighborhood(
+      colIndex, sp.getInhibitionRadius(), sp.getColumnDimensions()
     ).tolist()
-    return maskNeighbors
 

@@ -146,6 +146,7 @@ class SpRoute:
       # try:
       print "\tFetching SP {} from disk...".format(modelId)
       sp = SpFacade(modelId, ioClient)
+      sp.load()
       save = True
       # except Exception as err:
       #   print err
@@ -157,7 +158,6 @@ class SpRoute:
     print "\tEntering SP {} compute cycle iteration {} (Learn: {} Save: {})"\
       .format(modelId, iteration, learn, save)
     sp.compute(encoding, learn=learn, save=save, multiprocess=True)
-
 
     response = {}
     response["iteration"] = iteration
