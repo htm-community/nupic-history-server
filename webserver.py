@@ -1,5 +1,5 @@
 import time
-import simplejson as json
+import ujson as json
 import uuid
 
 import numpy as np
@@ -65,7 +65,6 @@ class SpRoute:
              POST "states" param.
     """
     global modelCache
-    print web.data()
     requestPayload = json.loads(web.data())
     params = requestPayload["params"]
     states = requestPayload["states"]
@@ -159,13 +158,16 @@ class SpRoute:
       .format(modelId, iteration, learn, save)
     sp.compute(encoding, learn=learn, save=save, multiprocess=True)
 
+
     response = {}
     response["iteration"] = iteration
     response["id"] = modelId
     response["state"] = sp.getState(*requestedStates)
 
     web.header("Content-Type", "application/json")
+    s = time.time()
     jsonOut = json.dumps(response)
+    print "payload construction took {}s".format((time.time()-s))
 
     end = time.time()
     print("\tHTTP SP compute cycle took %g seconds" % (end - start))

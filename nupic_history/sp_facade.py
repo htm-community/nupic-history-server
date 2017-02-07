@@ -127,7 +127,7 @@ class SpFacade(object):
     :param learn: whether sp will learn on this compute cycle
     """
     sp = self._sp
-    columns = np.zeros(sp.getNumColumns())
+    columns = self._getZeroedColumns()
     encoding = np.asarray(encoding, dtype="uint32")
 
     start = time.time()
@@ -243,18 +243,18 @@ class SpFacade(object):
   #            or iteration == self.getIteration())
 
 
-  def _getZeroedColumns(self):
+  def _getZeroedColumns(self, dtype=None):
     numCols = self.getParams()["numColumns"]
     zeros = np.zeros(shape=(numCols,))
-    # return zeros
-    return np.asarray(zeros, dtype="uint32")
+    if dtype is None: dtype = "uint32"
+    return np.asarray(zeros, dtype=dtype)
 
 
-  def _getZeroedInput(self):
+  def _getZeroedInput(self, dtype=None):
     numInputs = self.getParams()["numInputs"]
     zeros = np.zeros(shape=(numInputs,))
-    # return zeros
-    return np.asarray(zeros, dtype="uint32")
+    if dtype is None: dtype = "uint32"
+    return np.asarray(zeros, dtype=dtype)
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):
@@ -323,11 +323,10 @@ class SpFacade(object):
     out = []
     numColumns = self.getNumColumns()
     sp = self._sp
-    zeros = self._getZeroedInput()
+    zeros = self._getZeroedInput(dtype="float32")
     for colIndex in range(0, numColumns):
       perms = zeros.copy()
       sp.getPermanence(colIndex, perms)
-      print "For column {} avg perm is {}".format(colIndex, np.average(perms))
       out.append(np.around(perms, decimals=2).tolist())
     return out
 
