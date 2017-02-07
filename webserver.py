@@ -154,11 +154,10 @@ class SpRoute:
       #   return web.badrequest()
 
     iteration = sp.getIteration()
-    inputArray = np.asarray(encoding, dtype="uint32")
 
     print "\tEntering SP {} compute cycle iteration {} (Learn: {} Save: {})"\
       .format(modelId, iteration, learn, save)
-    sp.compute(inputArray, learn=learn, save=save, multiprocess=True)
+    sp.compute(encoding, learn=learn, save=save, multiprocess=True)
 
     response = {}
     response["iteration"] = iteration

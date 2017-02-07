@@ -29,8 +29,8 @@ class SpFacade(object):
       # New facade using given fresh SP.
       self._sp = sp
       self._id = str(uuid.uuid4()).split('-')[0]
-      self._input = self._getZeroedInput().tolist()
-      self._activeColumns = np.asarray(self._getZeroedColumns(), dtype="uint32")
+      self._input = self._getZeroedInput()
+      self._activeColumns = self._getZeroedColumns()
       self._iteration = sp.getIterationNum()
     self._state = None
     self._potentialPools = None
@@ -103,7 +103,7 @@ class SpFacade(object):
       params = {
         "numInputs": sp.getNumInputs(),
         "numColumns": sp.getNumColumns(),
-        "columnDimensions": np.asarray(sp.getColumnDimensions()),
+        "columnDimensions": np.asarray(sp.getColumnDimensions(), dtype="uint32"),
         "numActiveColumnsPerInhArea": sp.getNumActiveColumnsPerInhArea(),
         "potentialPct": sp.getPotentialPct(),
         "globalInhibition": sp.getGlobalInhibition(),
@@ -128,6 +128,7 @@ class SpFacade(object):
     """
     sp = self._sp
     columns = np.zeros(sp.getNumColumns())
+    encoding = np.asarray(encoding, dtype="uint32")
 
     start = time.time()
     sp.compute(encoding, learn, columns)
@@ -244,12 +245,16 @@ class SpFacade(object):
 
   def _getZeroedColumns(self):
     numCols = self.getParams()["numColumns"]
-    return np.zeros(shape=(numCols,))
+    zeros = np.zeros(shape=(numCols,))
+    return zeros
+    # return np.asarray(zeros, dtype="uint32")
 
 
   def _getZeroedInput(self):
     numInputs = self.getParams()["numInputs"]
-    return np.zeros(shape=(numInputs,))
+    zeros = np.zeros(shape=(numInputs,))
+    return zeros
+    # return np.asarray(zeros, dtype="uint32")
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):
@@ -293,7 +298,7 @@ class SpFacade(object):
     sp = self._sp
     out = []
     for colIndex in range(0, sp.getNumColumns()):
-      columnPool = np.asarray(self._getZeroedInput(), dtype="uint32")
+      columnPool = self._getZeroedInput()
       columnPoolIndices = []
       sp.getPotential(colIndex, columnPool)
       for i, pool in enumerate(columnPool):
