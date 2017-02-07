@@ -1,5 +1,6 @@
 import uuid
 import multiprocessing
+import time
 
 import numpy as np
 
@@ -127,7 +128,12 @@ class SpFacade(object):
     """
     sp = self._sp
     columns = np.zeros(sp.getNumColumns(), dtype="uint32")
+
+    start = time.time()
     sp.compute(encoding, learn, columns)
+    end = time.time()
+    print("\tSP compute took %g seconds" % (end - start))
+
     self._input = encoding
     self._activeColumns = columns
     self._state = None
@@ -243,7 +249,7 @@ class SpFacade(object):
 
   def _getZeroedInput(self):
     numInputs = self.getParams()["numInputs"]
-    return np.zeros(shape=(numInputs,))
+    return np.zeros(shape=(numInputs,), dtype="uint32")
 
 
   def _getSnapshot(self, name, iteration=None, columnIndex=None):
@@ -252,9 +258,11 @@ class SpFacade(object):
       return self._state[name]
     else:
       funcName = "_conjure{}".format(name[:1].upper() + name[1:])
-      # print "\t\t\t{}".format(funcName)
       func = getattr(self, funcName)
+      _start = time.time()
       result = func(iteration=iteration, columnIndex=columnIndex)
+      _end = time.time()
+      print "\t\t{}: {} seconds".format(funcName, (_end - _start))
       self._state[name] = result
       return result
 

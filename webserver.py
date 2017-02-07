@@ -114,7 +114,7 @@ class SpRoute:
     :return: id, iteration, and requested state from the sp instance in JSON.
              States are keyed by strings given in POST "states" param.
     """
-    requestStart = time.time()
+    start = time.time()
     requestPayload = json.loads(web.data())
 
     if "id" not in requestPayload:
@@ -164,8 +164,8 @@ class SpRoute:
     web.header("Content-Type", "application/json")
     jsonOut = json.dumps(response)
 
-    requestEnd = time.time()
-    print("\tSP compute cycle took %g seconds" % (requestEnd - requestStart))
+    end = time.time()
+    print("\tHTTP SP compute cycle took %g seconds" % (end - start))
 
     return jsonOut
 
