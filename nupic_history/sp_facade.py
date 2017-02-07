@@ -18,13 +18,16 @@ class SpFacade(object):
 
     :param sp: Either an instance of Spatial Pooler or a string model id
     :param ioClient: Instantiated IO client
-    :param save: list of Snapshots to save with each compute step
+    :param iteration: what iteration to resurrect the SP at
     """
     self._ioClient = ioClient
     if isinstance(sp, basestring):
       # Loading SP by id from IO.
       self._id = sp
-      self.load(iteration)
+      # Get the latest by default.
+      if iteration is None:
+        iteration = ioClient.getMaxIteration(id)
+      self._iteration = iteration
     else:
       # New facade using given fresh SP.
       self._sp = sp
@@ -51,20 +54,21 @@ class SpFacade(object):
     ioClient.saveSpatialPooler(self._sp, id, iteration)
 
 
-  def load(self, iteration=None):
+  def load(self):
     ioClient = self._ioClient
     id = self.getId()
-    if iteration is None:
-      iteration = ioClient.getMaxIteration(id)
+    iteration = self.getIteration()
+    print "Loading SP {} at iteration {}".format(id, iteration)
     self._sp = ioClient.loadSpatialPooler(
       id, iteration=iteration
     )
-    iteration = self.getIteration()
-    if iteration < 0:
+    if iteration == 0:
       self._input = self._getZeroedInput()
+      print "loading zeroed AC"
       self._activeColumns = self._getZeroedColumns()
     else:
       self._input = ioClient.loadEncoding(id, iteration)
+      print "loading AC from disk"
       self._activeColumns = ioClient.loadActiveColumns(id, iteration)
 
 
@@ -81,7 +85,10 @@ class SpFacade(object):
     Represents the current iteration of data the SP has seen.
     :return: int
     """
-    return self._sp.getIterationNum()
+    if hasattr(self, "_sp"):
+      return self._sp.getIterationNum()
+    else:
+      return self._iteration
 
 
   def getInput(self):

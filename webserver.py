@@ -165,9 +165,7 @@ class SpRoute:
     response["state"] = sp.getState(*requestedStates)
 
     web.header("Content-Type", "application/json")
-    s = time.time()
     jsonOut = json.dumps(response)
-    print "payload construction took {}s".format((time.time()-s))
 
     end = time.time()
     print("\tHTTP SP compute cycle took %g seconds" % (end - start))

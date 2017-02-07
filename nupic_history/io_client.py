@@ -137,6 +137,7 @@ class FileIoClient(object):
     print "\t{} activeColumns de-serialization of {} bytes into {} took {} ms".format(
       id, size, key, (end - start)
     )
+    return activeColumns
 
 
   def getMaxIteration(self, modelId):

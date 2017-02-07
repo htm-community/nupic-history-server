@@ -2,6 +2,7 @@ from nupic_history.sp_facade import SpFacade
 from nupic_history.tm_facade import TmFacade
 from nupic_history.io_client import FileIoClient
 
+from nupic_history import SpSnapshots as SNAPS
 
 class NupicHistory(object):
 
@@ -63,11 +64,22 @@ class NupicHistory(object):
       out[state] = []
 
     for iteration in xrange(self._ioClient.getMaxIteration(spId)):
-      # sp, iter = self._ioClient.loadSpatialPooler(spId, iteration=iteration)
-      # assert iter == iteration
       spFacade = SpFacade(spId, self._ioClient, iteration=iteration)
+      spFacade.load()
+      print spFacade._activeColumns
       for state in states:
-        out[state].append(spFacade.getState(state, columnIndex=columnIndex))
+        # Column activity only needs to be returned for the specified column.
+        myState = spFacade.getState(state)[state]
+        if state == SNAPS.ACT_COL:
+          isActive = columnIndex in myState["indices"]
+          if isActive:
+            isActive = 1
+          else:
+            isActive = 0
+          out[state].append(isActive)
+        else:
+          out[state].append(myState[columnIndex])
+
     return out
 
 
