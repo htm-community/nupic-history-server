@@ -26,7 +26,7 @@ class SpFacade(object):
       self._id = sp
       # Get the latest by default.
       if iteration is None:
-        iteration = ioClient.getMaxIteration(id)
+        iteration = ioClient.getMaxIteration(self._id)
       self._iteration = iteration
     else:
       # New facade using given fresh SP.
@@ -202,21 +202,6 @@ class SpFacade(object):
     return out
 
 
-  # def save(self):
-  #   """
-  #   Saves the current state of the SP to Redis.
-  #   """
-  #   if self._save is not None and len(self._save) > 0:
-  #     if self.getInput() is None:
-  #       raise ValueError(
-  #         "Cannot save SP state because it has never seen input.")
-  #     spid = self.getId()
-  #     params = self.getParams()
-  #     iteration = self.getIteration()
-  #     state = self.getState(*self._save)
-  #     self._ioClient.saveSpState(spid, params, iteration, state)
-
-
   def delete(self):
     """
     Deletes all traces of this SP instance from Redis.
@@ -230,25 +215,6 @@ class SpFacade(object):
     :return: [int] number of columns in the SP
     """
     return self.getParams()["numColumns"]
-
-
-  def _adjustSavedSnapshots(self):
-    # If user specified to save connected synapses, we'll switch it to
-    # permanences. We are actually not saving connected synapses at all. They
-    # are always calculated from permanences.
-    save = self._save
-    if save is not None and len(save) > 0 and SNAPS.CON_SYN in save:
-      save.remove(SNAPS.CON_SYN)
-      if SNAPS.PERMS not in save:
-        save.append(SNAPS.PERMS)
-
-
-
-  # def _retrieveFromAlgorithm(self, iteration, columnIndex=None):
-  #   return self.isActive() \
-  #          and (
-  #            (iteration is None and columnIndex is None)
-  #            or iteration == self.getIteration())
 
 
   def _getZeroedColumns(self, dtype=None):
