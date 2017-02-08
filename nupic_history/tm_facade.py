@@ -186,8 +186,10 @@ class TmFacade(object):
     else:
       funcName = "_conjure{}".format(name[:1].upper() + name[1:])
       func = getattr(self, funcName)
-      print "** Calling {}".format(funcName)
+      _start = time.time()
       result = func(iteration=iteration)
+      _end = time.time()
+      print "\t\t{}: {} seconds".format(funcName, (_end - _start))
       self._state[name] = result
       return result
 
