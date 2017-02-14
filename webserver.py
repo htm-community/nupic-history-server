@@ -400,7 +400,9 @@ class RoyalFlush:
 
 
   def DELETE(self):
+    global modelCache
     ioClient.nuke()
+    modelCache = {}
     return "NuPIC History Server got NUKED!"
 
 

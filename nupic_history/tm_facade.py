@@ -216,4 +216,11 @@ class TmFacade(object):
     return [
       self._segmentToDict(c, self._tm.connections)
       for c in self._tm.getActiveSegments()
-      ]
+    ]
+
+
+  def _conjureMatchingSegments(self, **kwargs):
+    return [
+      self._segmentToDict(c, self._tm.connections)
+      for c in self._tm.getMatchingSegments()
+    ]
