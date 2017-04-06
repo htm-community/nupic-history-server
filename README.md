@@ -20,11 +20,10 @@ Install python requirements.
 
     pip install -r requirements.txt
 
-Run Redis.
+Run Redis on port `8000`, as required for `htm-school-viz`)
 
-    redis-server
+    redis-server --port 8000
 
-By default, the Redis connection uses `localhost:6379`. I should allow users to override this.
 
 ## Save SP State Over Time
 
