@@ -20,9 +20,18 @@ Install python requirements.
 
     pip install -r requirements.txt
 
+Install redis-server (eg. `apt install redis-server` on Ubuntu).
+
+## Running 
+
 Run Redis.
 
     redis-server
+
+Run "history server" (it will listen on port `8080`)
+
+    python webserver.py
+
 
 By default, the Redis connection uses `localhost:6379`. I should allow users to override this.
 
