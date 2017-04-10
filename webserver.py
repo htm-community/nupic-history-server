@@ -14,6 +14,7 @@ else:
 
 from nupic.bindings.algorithms import TemporalMemory as TM
 
+from nupic_history.utils import calculateRadius
 from nupic_history import NupicHistory
 from nupic_history import SpSnapshots as SP_SNAPS
 from nupic_history.io_client import FileIoClient
@@ -21,11 +22,16 @@ from nupic_history.sp_facade import SpFacade
 from nupic_history.tm_facade import TmFacade
 from nupic_history import TmSnapshots as TM_SNAPS
 from nupic.algorithms.sdr_classifier_factory import SDRClassifierFactory
-
+try:
+  from nupic.encoders import CartesianCoordinateEncoder
+except:
+  print "Missing: CartesianCoordinateEncoder"
 
 ioClient = FileIoClient(workingDir="./working")
 modelCache = {}
 nupicHistory = NupicHistory(ioClient)
+global lastCoordinate
+lastCoordinate = None
 
 urls = (
   "/", "Index",
@@ -33,6 +39,7 @@ urls = (
   "/_sp/(.+)/history/(.+)", "SpHistoryRoute",
   "/_tm/", "TmRoute",
   "/_compute/", "ComputeRoute",
+  "/_encodeCoordinate/", "EncodeCoordinate",
   "/_flush/", "RoyalFlush",
 )
 web.config.debug = False
@@ -45,6 +52,7 @@ class Index:
 
   def GET(self):
     return "NuPIC History Server"
+
 
 
 class SpRoute:
@@ -254,11 +262,11 @@ class TmRoute:
 
     modelId = requestInput["id"]
 
-    if modelId not in tmFacades.keys():
+    if modelId not in modelCache.keys():
       print "Unknown model id {}!".format(modelId)
       return web.badrequest()
 
-    tm = tmFacades[modelId]
+    tm = modelCache[modelId]["tm"]
 
     learn = True
     if "learn" in requestInput:
@@ -287,6 +295,7 @@ class TmRoute:
     print("\tTM compute cycle took %g seconds" % (requestEnd - requestStart))
 
     return jsonOut
+
 
 
 class ComputeRoute:
@@ -396,11 +405,80 @@ class ComputeRoute:
     return jsonOut
 
 
+
+class EncodeCoordinate:
+
+  def POST(self):
+    global coordinateEncoder
+    requestPayload = json.loads(web.data())
+
+    if "id" not in requestPayload:
+      print "Request must include a model id for Spatial Pooler retrieval."
+      return web.badrequest()
+    modelId = requestPayload["id"]
+    if modelId not in modelCache.keys():
+      print "Unknown model id {}!".format(modelId)
+      return web.badrequest()
+
+    scale = requestPayload["scale"]
+    timestep = requestPayload["timestep"]
+    w = requestPayload["w"]
+    n = requestPayload["n"]
+    modelCache[modelId]["encoder"] = CartesianCoordinateEncoder(
+      scale, timestep, w=w, n=n
+    )
+    return json.dumps({"status": "success"})
+
+
+  def PUT(self):
+    global lastCoordinate
+    start = time.time()
+    requestPayload = json.loads(web.data())
+
+    if "id" not in requestPayload:
+      print "Request must include a model id for Spatial Pooler retrieval."
+      return web.badrequest()
+    modelId = requestPayload["id"]
+    if modelId not in modelCache.keys():
+      print "Unknown model id {}!".format(modelId)
+      return web.badrequest()
+    encoder = modelCache[modelId]["encoder"]
+    if "encoder" not in modelCache[modelId].keys():
+      print "No encoder for model {}!".format(modelId)
+      return web.badrequest()
+
+    position = requestPayload["position"]
+    timestamp = long(requestPayload["timestamp"])
+    x = float(position["x"])
+    y = float(position["y"])
+    z = float(position["z"])
+    speed = float(requestPayload["speed"])
+
+    vector = np.array([speed, x, y, z]).astype(int)
+    thisPoint = dict(time=timestamp, location=vector)
+    lastCoordinate = thisPoint
+    encoding = np.zeros(encoder.getWidth())
+    # print vector
+    # print encoding
+    encoder.encodeIntoArray(vector, encoding)
+    # print encoding
+
+    end = time.time()
+    print("\tCoordinate encoding took %g seconds" % (end - start))
+
+    return json.dumps({
+      "encoding": encoding.tolist()
+    })
+
+
+
 class RoyalFlush:
 
 
   def DELETE(self):
     global modelCache
+    global lastCoordinate
+    lastCoordinate = None
     ioClient.nuke()
     modelCache = {}
     return "NuPIC History Server got NUKED!"

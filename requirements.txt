@@ -1,5 +1,5 @@
-nupic==0.5.7.dev0
-nupic.bindings==0.4.13.dev0
+nupic>=0.5.7.dev0
+nupic.bindings>=0.4.13.dev0
 redis==2.10.5
 web.py==0.38
 wsgiref==0.1.2
