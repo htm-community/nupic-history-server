@@ -205,11 +205,11 @@ class TmFacade(object):
 
 
   def _conjureActiveCells(self, **kwargs):
-    return self._tm.getActiveCells()
+    return self._tm.getActiveCells().tolist()
 
 
   def _conjurePredictiveCells(self, **kwargs):
-    return self._tm.getPredictiveCells()
+    return self._tm.getPredictiveCells().tolist()
 
 
   def _conjureActiveSegments(self, **kwargs):
