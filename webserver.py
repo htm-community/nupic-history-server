@@ -213,7 +213,7 @@ class TmRoute:
 
     modelId = tmFacade.getId()
     modelCache[modelId]["tm"] = tmFacade
-    modelCache[modelId]["classifier"] = SDRClassifierFactory.create()
+    modelCache[modelId]["classifier"] = SDRClassifierFactory.create(implementation="py")
     modelCache[modelId]["recordsSeen"] = 0
 
     print "Created TM {}".format(modelId)
@@ -354,9 +354,9 @@ class ComputeRoute:
     tmResults = tm.getState(*tmSnapshots)
 
     c = modelCache[modelId]["classifier"]
-    bucketIdx = requestInput["bucketIdx"]
+    bucketIdx = int(requestInput["bucketIdx"])
     actValue = requestInput["actValue"]
-    recordNum = modelCache[modelId]["recordsSeen"]
+    recordNum = int(modelCache[modelId]["recordsSeen"])
 
     # inference
     inference = c.compute(
