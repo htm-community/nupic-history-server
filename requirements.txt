@@ -1,8 +1,7 @@
-nupic
-nupic.bindings
+nupic=>1.0.0
+nupic.bindings=>1.0.0
 redis==2.10.5
 web.py==0.38
 wsgiref==0.1.2
 msgpack-python==0.4.1
 ujson==1.35
-
